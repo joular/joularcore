@@ -17,11 +17,37 @@ package body Joular_Core is
     -- Variable to check if Open was called and not yet closed
     Opened : Boolean := False;
 
+    -- List of components asked to be measured
+    Sources_List_Asked : Source_List := (others => False);
+
+    -- List of components that can be read/accessed from the asked ones
+    Sources_List_Accessible : Source_List := (others => False);
+
     --------------------------------------------------
 
     procedure Open (Sources : in Source_List := All_Sources) is
     begin
+        -- Set the list of hardware components asked and accessible
+        Sources_List_Asked := Sources;
+        Sources_List_Accessible := (others => False);
+
+        -- Check and initialize CPU measurement
+        if Sources_List_Asked (CPU) then
+            -- TODO: call CPU detection
+            -- TODO: set Sources_List_Accessible (CPU) to True
+        end if;
+
+        -- Check and initialize GPU measurement
+        if Sources_List_Asked (GPU) then
+            -- TODO: call GPU detection
+            -- TODO: set Sources_List_Accessible (GPU) to True
+        end if;
+
         Opened := True;
+    exception
+        when others =>
+            Sources_List_Accessible := (others => False);
+            Opened := True;
     end Open;
 
     --------------------------------------------------
@@ -29,6 +55,11 @@ package body Joular_Core is
     procedure Close is
     begin
         Opened := False;
+        Sources_List_Asked := (others => False);
+        Sources_List_Accessible := (others => False);
+    exception
+        when others =>
+            Opened := False;
     end Close;
 
     --------------------------------------------------
@@ -37,6 +68,9 @@ package body Joular_Core is
         Result : Reading := (others => (others => <>));
     begin
         return Result;
+    exception
+        when others =>
+            return (others => (others => <>));
     end Read;
 
     --------------------------------------------------
