@@ -9,6 +9,10 @@
 --  Author : Adel Noureddine
 --
 
+with Ada.Directories;
+with Ada.Strings.Fixed;
+with Ada.Text_IO;
+
 package body Joular_Core is
 
     -- Library version number
@@ -23,6 +27,54 @@ package body Joular_Core is
     -- List of components that can be read/accessed from the asked ones
     Sources_List_Accessible : Source_List := (others => False);
 
+    type CPU_Backend is (No_CPU_Backend, RAPL, Raspberry_Pi);
+
+    Detected_CPU_Backend : CPU_Backend := No_CPU_Backend;
+
+    function Is_Raspberry_Pi return Boolean is
+        Model_File : Ada.Text_IO.File_Type;
+    begin
+        if Ada.Directories.Exists ("/sys/firmware/devicetree/base/model") then
+            Ada.Text_IO.Open
+              (Model_File,
+               Ada.Text_IO.In_File,
+               "/sys/firmware/devicetree/base/model");
+        elsif Ada.Directories.Exists ("/proc/device-tree/model") then
+            Ada.Text_IO.Open
+              (Model_File, Ada.Text_IO.In_File, "/proc/device-tree/model");
+        else
+            return False;
+        end if;
+
+        declare
+            Model : constant String := Ada.Text_IO.Get_Line (Model_File);
+        begin
+            Ada.Text_IO.Close (Model_File);
+            return Ada.Strings.Fixed.Index (Model, "Raspberry Pi") /= 0;
+        end;
+    exception
+        when others =>
+            if Ada.Text_IO.Is_Open (Model_File) then
+                Ada.Text_IO.Close (Model_File);
+            end if;
+            return False;
+    end Is_Raspberry_Pi;
+
+    function Detect_CPU return CPU_Backend is
+    begin
+        if Ada.Directories.Exists ("/sys/class/powercap/intel-rapl")
+          or else Ada.Directories.Exists ("/sys/class/powercap/intel-rapl:0")
+          or else Ada.Directories.Exists ("/sys/class/powercap/amd-rapl")
+          or else Ada.Directories.Exists ("/sys/class/powercap/amd-rapl:0")
+        then
+            return RAPL;
+        elsif Is_Raspberry_Pi then
+            return Raspberry_Pi;
+        else
+            return No_CPU_Backend;
+        end if;
+    end Detect_CPU;
+
     --------------------------------------------------
 
     procedure Open (Sources : in Source_List := All_Sources) is
@@ -33,12 +85,13 @@ package body Joular_Core is
 
         -- Check and initialize CPU measurement
         if Sources_List_Asked (CPU) then
-            -- TODO: call CPU detection
+            Detected_CPU_Backend := Detect_CPU;
             -- TODO: set Sources_List_Accessible (CPU) to True
         end if;
 
         -- Check and initialize GPU measurement
         if Sources_List_Asked (GPU) then
+            null;
             -- TODO: call GPU detection
             -- TODO: set Sources_List_Accessible (GPU) to True
         end if;

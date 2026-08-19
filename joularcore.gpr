@@ -1,13 +1,37 @@
 library project Joularcore is
+
+    -- Symbols to indicate which OS to compile for
+    -- Build with: gprbuild -XPJ_OS=windows
+    type OS_Platform is ("linux", "windows", "macos", "bsd");
+    PJ_OS : OS_Platform := external ("PJ_OS", "linux");
+
+    Defines := ();
+
+    case PJ_OS is
+        when "linux" =>
+            Defines := ("-gnateDPJ_LINUX=True", "-gnateDPJ_WINDOWS=False",
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+        when "windows" =>
+            Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=True",
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+        when "macos" =>
+            Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
+                        "-gnateDPJ_MACOS=True", "-gnateDPJ_BSD=False");
+        when "bsd" =>
+            Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
+    end case;
+
     for Languages use ("Ada");
     for Library_Name use "Joular_Core";
     for Source_Dirs use ("src");
     for Object_Dir use "obj";
     for Library_Dir use "lib";
     for Library_Kind use "Static";
+    for Create_Missing_Dirs use "True";
 
     package Compiler is
-        for Switches ("Ada") use ("-O3");
+        for Switches ("Ada") use ("-O3", "-gnat2012") & Defines;
     end Compiler;
 
     package Binder is
