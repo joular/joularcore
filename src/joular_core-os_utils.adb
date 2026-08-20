@@ -95,9 +95,25 @@ package body Joular_Core.OS_Utils is
             return "";
     end Get_Platform_CPU_Name;
 
+#elsif PJ_MACOS then
+
+    -- MacOS platform not yet implemented
+    function Get_Platform_CPU_Name return String is
+    begin
+        return "";
+    end Get_Platform_CPU_Name;
+
+#elsif PJ_BSD then
+
+    -- BSD platforms not yet implemented
+    function Get_Platform_CPU_Name return String is
+    begin
+        return "";
+    end Get_Platform_CPU_Name;
+
 #else
 
-    -- On other platforms (macOS, BSD), not yet implemented
+    -- On other platforms, not supported
     function Get_Platform_CPU_Name return String is
     begin
         return "";
