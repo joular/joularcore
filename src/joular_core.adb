@@ -11,7 +11,10 @@
 
 with Ada.Directories;
 with Ada.Strings.Fixed;
-with Ada.Text_IO;
+with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+
+with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
 
 package body Joular_Core is
 
@@ -27,6 +30,9 @@ package body Joular_Core is
     -- List of components that can be read/accessed from the asked ones
     Sources_List_Accessible : Source_List := (others => False);
 
+    -- CPU Platform
+    Platform : Unbounded_String;
+
     --------------------------------------------------
 
     procedure Open (Sources : in Source_List := All_Sources) is
@@ -37,15 +43,21 @@ package body Joular_Core is
 
         -- Check and initialize CPU measurement
         if Sources_List_Asked (CPU) then
-            -- TODO: Detect CPU vendor
-            -- TODO: set Sources_List_Accessible (CPU) to True
-            null;
+            -- Detect CPU vendor
+            Platform := To_Unbounded_String (Get_Platform_CPU_Name);
+
+            -- Set Sources_List_Accessible (CPU) to True so it can be monitored
+            Sources_List_Accessible (CPU) := True;
+
+            -- TODO: open CPU monitoring
+            -- Mainly, check RAPL files or MSR (Linux, Windows, BSD), Powemetrics or API (macOS), and models on Raspberry Pi, and that they return valid data
         end if;
 
         -- Check and initialize GPU measurement
         if Sources_List_Asked (GPU) then
             -- TODO: call GPU detection
             -- TODO: set Sources_List_Accessible (GPU) to True
+            -- TODO: check that nvidia or AMD GPU power monitoring is accessible and returns valid data
             null;
         end if;
 

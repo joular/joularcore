@@ -12,7 +12,7 @@
 package Joular_Core.OS_Utils is
 
     -- Get the CPU vendor (Intel/AMD) or the board name (for Raspberry Pi)
-    -- Values: intel, amd, rpi
+    -- Values: intel, amd, rpi, apple (for Apple Silicon only)
     -- Returns empty String is no supported platform found or can't read model or CPU vendor
     function Get_Platform_CPU_Name return String;
 
