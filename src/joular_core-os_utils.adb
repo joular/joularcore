@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
-#if PJ_WINDOWS or PJ_LINUX then
+#if PJ_WINDOWS or PJ_LINUX or PJ_BSD then
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 #end if;
 

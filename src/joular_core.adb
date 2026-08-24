@@ -9,12 +9,10 @@
 --  Author : Adel Noureddine
 --
 
-with Ada.Directories;
-with Ada.Strings.Fixed;
-with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
 with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
+with Joular_Core.CPU_Monitor; use Joular_Core.CPU_Monitor;
 
 package body Joular_Core is
 
@@ -46,11 +44,14 @@ package body Joular_Core is
             -- Detect CPU vendor
             Platform := To_Unbounded_String (Get_Platform_CPU_Name);
 
-            -- Set Sources_List_Accessible (CPU) to True so it can be monitored
-            Sources_List_Accessible (CPU) := True;
+            -- Check if CPU monitoring is available and accessible
+            Sources_List_Accessible (CPU) := Detect_CPU;
 
-            -- TODO: open CPU monitoring
-            -- Mainly, check RAPL files or MSR (Linux, Windows, BSD), Powemetrics or API (macOS), and models on Raspberry Pi, and that they return valid data
+            -- Open CPU monitoring
+            -- Do a first reading (useful for RAPL) but return nothing
+            if Sources_List_Accessible (CPU) then
+                Start_Monitoring;
+            end if;
         end if;
 
         -- Check and initialize GPU measurement
@@ -85,6 +86,9 @@ package body Joular_Core is
     function Read (Sources : in Source_List := All_Sources) return Reading is
         Result : Reading := (others => (others => <>));
     begin
+        if Sources (CPU) and then Sources_List_Accessible (CPU) then
+            Result (CPU) := Get_CPU_Reading;
+        end if;
         return Result;
     exception
         when others =>
