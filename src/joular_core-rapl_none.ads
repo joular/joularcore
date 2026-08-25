@@ -9,8 +9,8 @@
 --  Author : Adel Noureddine
 --
 
--- This package is for reading RAPL values from powercap in Linux
-package Joular_Core.RAPL_Powercap is
+-- This package is for platforms with no RAPL support yet
+package Joular_Core.RAPL_None is
 
     -- Open the RAPL counter (driver or files)
     -- Checks that PKG domain exists and can be read
@@ -25,4 +25,4 @@ package Joular_Core.RAPL_Powercap is
     -- Close driver on Windows, nothing on Linux
     procedure Close;
 
-end Joular_Core.RAPL_Powercap;
+end Joular_Core.RAPL_None;

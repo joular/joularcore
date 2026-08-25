@@ -9,20 +9,20 @@
 --  Author : Adel Noureddine
 --
 
--- This package is for reading RAPL values from powercap in Linux
-package Joular_Core.RAPL_Powercap is
+-- This package is for RAPL for Windows (reading MSR directly using Hubblo's RAPL driver for Windows)
+package Joular_Core.RAPL_MSR_Windows is
 
     -- Open the RAPL counter (driver or files)
     -- Checks that PKG domain exists and can be read
     function Open return Boolean;
-    
+
     -- Get the max energy range of the RAPL counter
     function Max_Energy_Range return Long_Long_Integer;
-    
+
     -- Get a reading from the RAPL counter, as is, in microjoules
     function Read_Counter return Long_Long_Integer;
-    
+
     -- Close driver on Windows, nothing on Linux
     procedure Close;
 
-end Joular_Core.RAPL_Powercap;
+end Joular_Core.RAPL_MSR_Windows;
