@@ -50,20 +50,16 @@ package body Joular_Core.RPI is
     -- One model per board. Boards with models fitted at a lower degree than 9, have their remaining coefficient at 0
     Models : constant array (Board_Model) of Power_Model :=
 
-    -- KNOWN ISSUE: the coefficients of the 5B do not behave at the ends of their
-    -- range. Over 0 .. 1 they give 8.72 W at no load and 3.73 W at full load, the
-    -- wrong way around, and those two are the most common operating points of a
-    -- board. They hold between 0.4 and 0.9, and are worth measuring again
-        (RPI_5B_64 => (8.71648242592654,
-                       -186.5634686,
-                       2676.08397456,
-                       -18839.18873015,
-                       75110.3949109,
-                       -180373.73562042,
-                       267380.23597063,
-                       -240403.81341249,
-                       120509.01405772,
-                       -25877.41360901),
+        (RPI_5B_64 => (3.482347585466841,
+                       4.79754735,
+                       -194.6728884,
+                       2943.39811783,
+                       -18701.88486195,
+                       62067.07334862,
+                       -115731.34642828,
+                       122197.10885563,
+                       -68266.30180963,
+                       15687.86508083),
 
          RPI_400_64 => (2.6630056198236938,
                         0.82814554,
