@@ -46,7 +46,7 @@ package body Joular_Core is
 
             -- Check if CPU monitoring is available and accessible
             -- Also, this function will take a first reading on cumulative counters (i.e., RAPL)
-            Sources_List_Accessible (CPU) := Detect_CPU;
+            Sources_List_Accessible (CPU) := Detect_CPU (To_String (Platform));
         end if;
 
         -- Check and initialize GPU measurement

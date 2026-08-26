@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
-package Joular_Core.OS_Utils is
+private package Joular_Core.OS_Utils is
 
     -- Get the CPU vendor (Intel/AMD) or the board name (for Raspberry Pi)
     -- Values: intel, amd, rpi, apple (for Apple Silicon only)

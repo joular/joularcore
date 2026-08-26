@@ -10,7 +10,7 @@
 --
 
 -- This package is for platforms with no RAPL support yet
-package Joular_Core.RAPL_None is
+private package Joular_Core.RAPL_None is
 
     -- Open the RAPL counter (driver or files)
     -- Checks that PKG domain exists and can be read

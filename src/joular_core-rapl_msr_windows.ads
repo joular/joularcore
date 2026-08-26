@@ -10,7 +10,7 @@
 --
 
 -- This package is for RAPL for Windows (reading MSR directly using Hubblo's RAPL driver for Windows)
-package Joular_Core.RAPL_MSR_Windows is
+private package Joular_Core.RAPL_MSR_Windows is
 
     -- Open the RAPL counter (driver or files)
     -- Checks that PKG domain exists and can be read

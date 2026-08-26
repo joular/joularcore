@@ -12,7 +12,7 @@
 -- Read RAPL energy counter for supported platforms
 -- Only reads PKG domain of the main CPU socket
 
-package Joular_Core.RAPL is
+private package Joular_Core.RAPL is
 
     -- Check if RAPL counter can be read on machine (file or MSR)
     -- Opens driver when needed (Windows)

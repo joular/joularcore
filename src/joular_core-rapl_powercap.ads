@@ -10,7 +10,7 @@
 --
 
 -- This package is for reading RAPL values from powercap in Linux
-package Joular_Core.RAPL_Powercap is
+private package Joular_Core.RAPL_Powercap is
 
     -- Open the RAPL counter (driver or files)
     -- Checks that PKG domain exists and can be read

@@ -9,12 +9,12 @@
 --  Author : Adel Noureddine
 --
 
-package Joular_Core.CPU_Monitor is
+private package Joular_Core.CPU_Monitor is
 
     -- Detect CPU packages and characteristics
     -- Ex.: RAPL max range, PKG supported, Raspberry Pi board model, MSR or powercap, etc.
     -- Return True is CPU monitoring is present and accessible, otherwise False
-    function Detect_CPU return Boolean;
+    function Detect_CPU (Platform : in String) return Boolean;
 
     -- Monitor the CPU energy and take a measurement
     -- Return the energy consumed since last reading, or the power consumption as reported by hardware
