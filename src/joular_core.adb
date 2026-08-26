@@ -13,6 +13,8 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
 with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
 with Joular_Core.CPU_Monitor; use Joular_Core.CPU_Monitor;
+with Joular_Core.GPU_Monitor; use Joular_Core.GPU_Monitor;
+
 
 package body Joular_Core is
 
@@ -51,10 +53,9 @@ package body Joular_Core is
 
         -- Check and initialize GPU measurement
         if Sources_List_Asked (GPU) then
-            -- TODO: call GPU detection
-            -- TODO: set Sources_List_Accessible (GPU) to True
-            -- TODO: check that nvidia or AMD GPU power monitoring is accessible and returns valid data
-            null;
+            -- Check if GPU monitoring is available and accessible
+            -- Also, this function will load the libraries needed (NVML for Nvidia, ADLX for AMD) or check for GPU power files (hwmon sysfs for AMD)
+            Sources_List_Accessible (GPU) := Detect_GPU;
         end if;
 
         Opened := True;
@@ -69,7 +70,11 @@ package body Joular_Core is
     procedure Close is
     begin
         if Sources_List_Accessible (CPU) then
-            Stop_Monitoring;
+            CPU_Monitor.Stop_Monitoring;
+        end if;
+        
+        if Sources_List_Accessible (GPU) then
+            GPU_Monitor.Stop_Monitoring;
         end if;
         
         Opened := False;
@@ -87,6 +92,10 @@ package body Joular_Core is
     begin
         if Sources (CPU) and then Sources_List_Accessible (CPU) then
             Result (CPU) := Get_CPU_Reading;
+        end if;
+        
+        if Sources (GPU) and then Sources_List_Accessible (GPU) then
+            Result (GPU) := Get_GPU_Reading;
         end if;
         
         return Result;
