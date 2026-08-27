@@ -9,3 +9,5 @@ lib/
 .vscode/
 .DS_Store
 example/
+config/
+alire/

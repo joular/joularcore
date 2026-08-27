@@ -1,5 +1,5 @@
 name = "joularcore"
-description = "A library to get and monitor the energy and power consumption of hardware components on multiple OSes"
+description = "Library to monitor hardware components' energy consumption on all OSes"
 version = "0.1.1"
 
 authors = ["Adel Noureddine"]
