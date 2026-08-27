@@ -1,0 +1,12 @@
+name = "joularcore"
+description = "A library to get and monitor the energy and power consumption of hardware components on multiple OSes"
+version = "0.1.1"
+
+authors = ["Adel Noureddine"]
+maintainers = ["Adel Noureddine <adel.noureddine@outlook.com>"]
+maintainers-logins = ["adelnoureddine"]
+
+tags = ["power", "energy", "linux", "windows", "macos", "bsd", "cpu", "gpu"]
+
+licenses = "LGPL-3.0-only"
+website = "https://www.noureddine.org/research/joular/joularcore"

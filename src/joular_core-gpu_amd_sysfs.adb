@@ -31,7 +31,7 @@ package body Joular_Core.GPU_AMD_Sysfs is
     Instant_File : constant String := "power1_input";
 
     -- Max sensors to search in hwmon looking for AMD GPU
-    Max_Sensors : constant := 32;
+    Max_Sensors : constant := 64;
 
     -- The power file of the found GPU card
     Power_File : Unbounded_String;

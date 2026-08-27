@@ -46,13 +46,11 @@ package Joular_Core is
     procedure Open (Sources : in Source_List := All_Sources);
 
     -- Close opened files or drivers that were already opened in Open procedure or during reading
-    procedure Close
-        with Pre => Is_Open;
+    procedure Close;
 
     -- Take one reading for each of the hardware sources set to True in Sources
     -- Returns a Reading type: a list of measurement (value, unit) for each hardware source
-    function Read (Sources : in Source_List := All_Sources) return Reading
-        with Pre => Is_Open;
+    function Read (Sources : in Source_List := All_Sources) return Reading;
 
     -- Return True if Open procedure was already called and not closed
     function Is_Open return Boolean;

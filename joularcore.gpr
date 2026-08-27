@@ -1,9 +1,21 @@
 library project Joularcore is
 
+    --  Windows sets OS=Windows_NT; Linux/macOS/BSD leave it unset
+    type Host_OS_Kind is ("Windows_NT", "other");
+    Host_OS : Host_OS_Kind := external ("OS", "other");
+
+    Default_OS := "linux";
+    case Host_OS is
+        when "Windows_NT"
+            => Default_OS := "windows";
+        when "other"
+            => Default_OS := "linux";
+    end case;
+
     -- Symbols to indicate which OS to compile for
     -- Build with: gprbuild -XPJ_OS=windows
     type OS_Platform is ("linux", "windows", "macos", "bsd");
-    PJ_OS : OS_Platform := external ("PJ_OS", "linux");
+    PJ_OS : OS_Platform := external ("PJ_OS", Default_OS);
 
     Defines := ();
 

@@ -18,7 +18,7 @@ with Joular_Core.RPI; use Joular_Core.RPI;
 package body Joular_Core.CPU_Monitor is
 
     -- CPU driver method to get energy/power readings
-    type Driver_Kind is (None, RAPL_Counter, RPI_Models, Powermetrics);
+    type Driver_Kind is (None, RAPL_Counter, RPI_Models); --, Powermetrics);
 
     -- Driver detected and used
     Driver : Driver_Kind := None;

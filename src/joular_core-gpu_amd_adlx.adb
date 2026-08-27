@@ -273,11 +273,11 @@ package body Joular_Core.GPU_AMD_ADLX is
                 Power := Long_Float (Value);
                 Found := True;
             end if;
-
-            -- The object is ours, so it has to be given back on every reading
-            -- Otherwise ADLX is left holding one per reading and refuses to stop cleanly
-            Release_Object (Metrics);
         end if;
+
+        -- The object is ours, so it has to be given back on every reading
+        -- Otherwise ADLX is left holding one per reading and refuses to stop cleanly
+        Release_Object (Metrics);
 
         return Found;
     exception

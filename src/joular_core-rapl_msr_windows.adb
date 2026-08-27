@@ -187,6 +187,7 @@ package body Joular_Core.RAPL_MSR_Windows is
         return True;
     exception
         when others =>
+            Close;
             return False;
     end Open;
 
