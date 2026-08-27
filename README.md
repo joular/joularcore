@@ -17,11 +17,12 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 |---|---|---|---|---|
 | CPU | Intel, AMD | Linux | RAPL through powercap sysfs | Energy (joules) |
 | CPU | Intel, AMD | Windows | RAPL MSR through [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
-| CPU | Raspberry Pi (5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W), Asus Tinker Board | Linux | Regression power models | Power (watts) |
+| CPU | Raspberry Pi | Linux | Regression power models | Power (watts) |
 | GPU | Nvidia cards | Linux, Windows | NVML (installed with the Nvidia driver) | Power (watts) |
 | GPU | AMD cards | Linux | amdgpu hwmon sysfs | Power (watts) |
 | GPU | AMD cards | Windows | ADLX (installed with the AMD driver) | Power (watts) |
 
+For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board.
 macOS and BSD support is planned and will come in a future version.
 
 ## Required privileges
