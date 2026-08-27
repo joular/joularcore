@@ -34,12 +34,20 @@ library project Joularcore is
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
     end case;
 
+    -- Library type
+    -- static : libJoular_Core.a, linked into the client
+    -- relocatable : libJoular_Core.so / .dll / .dylib
+    -- static-pic : archive built position independent, so it can itself be linked into someone else's shared library
+    type Library_Type_Kind is ("static", "relocatable", "static-pic");
+    Library_Type : Library_Type_Kind :=
+        external ("JOULARCORE_LIBRARY_TYPE", external ("LIBRARY_TYPE", "static"));
+
     for Languages use ("Ada");
     for Library_Name use "Joular_Core";
     for Source_Dirs use ("src");
-    for Object_Dir use "obj";
-    for Library_Dir use "lib";
-    for Library_Kind use "Static";
+    for Object_Dir  use "obj/" & Library_Type;
+    for Library_Dir use "lib/" & Library_Type;
+    for Library_Kind use Library_Type;
     for Create_Missing_Dirs use "True";
 
     package Compiler is

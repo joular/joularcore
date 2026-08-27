@@ -1,6 +1,6 @@
 name = "joularcore"
 description = "Library to monitor hardware components' energy consumption on all OSes"
-version = "0.1.1"
+version = "0.1.0"
 
 authors = ["Adel Noureddine"]
 maintainers = ["Adel Noureddine <adel.noureddine@outlook.com>"]
