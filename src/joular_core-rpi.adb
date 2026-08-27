@@ -9,9 +9,9 @@
 --  Author : Adel Noureddine
 --
 
-with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 with Joular_Core.CPU_Load;
+with Joular_Core.File_Utils;
 
 package body Joular_Core.RPI is
 
@@ -252,24 +252,10 @@ package body Joular_Core.RPI is
     --------------------------------------------------
 
     -- Read and detect the board's model name from device tree file
+    -- An unreadable or missing file gives an empty name, which no model matches
     function Detect_Model return Model_Name is
-        F_Name : File_Type;
-        Result : Model_Name := None;
     begin
-        Open (F_Name, In_File, Device_Tree_File);
-
-        if not End_Of_File (F_Name) then
-            Result := Model_Of (Get_Line (F_Name));
-        end if;
-
-        Close (F_Name);
-        return Result;
-    exception
-        when others =>
-            if Is_Open (F_Name) then
-                Close (F_Name);
-            end if;
-            return None;
+        return Model_Of (File_Utils.Read_First_Line (Device_Tree_File));
     end Detect_Model;
 
     --------------------------------------------------

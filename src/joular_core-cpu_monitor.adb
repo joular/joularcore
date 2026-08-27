@@ -10,15 +10,12 @@
 --
 
 with Joular_Core.RAPL; use Joular_Core.RAPL;
-
-#if PJ_LINUX then
 with Joular_Core.RPI; use Joular_Core.RPI;
-#end if;
 
 package body Joular_Core.CPU_Monitor is
 
     -- CPU driver method to get energy/power readings
-    type Driver_Kind is (None, RAPL_Counter, RPI_Models); --, Powermetrics);
+    type Driver_Kind is (None, RAPL_Counter, RPI_Models); --, Powermetrics for macOS later
 
     -- Driver detected and used
     Driver : Driver_Kind := None;
@@ -35,21 +32,12 @@ package body Joular_Core.CPU_Monitor is
             return True;
         end if;
 
-#if PJ_LINUX then
-
-        -- On Linux, but no RAPL, then check for Raspberry Pi models
+        -- No RAPL, then check for Raspberry Pi and other board models
+        -- Only boards running Linux have a model, so this simply finds nothing on other OSes
         if RPI.Is_Accessible then
             Driver := RPI_Models;
             return True;
         end if;
-
-#elsif PJ_MACOS then
-
-        -- Driver := Powermetrics;
-
-        -- TODO: check if powermetrics accessible and return power values
-
-#end if;
 
         return Driver /= None;
     end Detect_CPU;
@@ -65,14 +53,12 @@ package body Joular_Core.CPU_Monitor is
                     Unit => Energy);
         end if;
 
-#if PJ_LINUX then
         if Driver = RPI_Models then
             -- Raspberry Pi models estimate the power drawn since the last reading, in watts
             return (Available => True,
                     Value => RPI.Get_Power,
                     Unit => Power);
         end if;
-#end if;
 
         -- No driver available, nothing to read so return empty measurement
         return (others => <>);
@@ -86,11 +72,9 @@ package body Joular_Core.CPU_Monitor is
             RAPL.Close;
         end if;
 
-#if PJ_LINUX then
         if Driver = RPI_Models then
             RPI.Close;
         end if;
-#end if;
 
         Driver := None;
     end Stop_Monitoring;

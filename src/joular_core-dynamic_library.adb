@@ -15,9 +15,16 @@ package body Joular_Core.Dynamic_Library is
 
 #if PJ_WINDOWS then
 
+    -- Only look for the library in the Windows system folder (System32), where the GPU drivers install them
+    -- A plain LoadLibraryA would look in the program's own folder first, where a malicious library with the same name could have been planted
+    LOAD_LIBRARY_SEARCH_SYSTEM32 : constant unsigned := 16#800#;
+
     -- Windows specific functions to load libraries
-    function LoadLibraryA (lpLibFileName : System.Address) return System.Address;
-    pragma Import (Stdcall, LoadLibraryA, "LoadLibraryA");
+    function LoadLibraryExA
+       (lpLibFileName : System.Address;
+        hFile : System.Address;
+        dwFlags : unsigned) return System.Address;
+    pragma Import (Stdcall, LoadLibraryExA, "LoadLibraryExA");
 
     function GetProcAddress (hModule : System.Address; lpProcName : System.Address) return System.Address;
     pragma Import (Stdcall, GetProcAddress, "GetProcAddress");
@@ -30,7 +37,7 @@ package body Joular_Core.Dynamic_Library is
     function Load (Name : in String) return System.Address is
         C_Name : aliased char_array := To_C (Name);
     begin
-        return LoadLibraryA (C_Name'Address);
+        return LoadLibraryExA (C_Name'Address, System.Null_Address, LOAD_LIBRARY_SEARCH_SYSTEM32);
     exception
         when others =>
             return System.Null_Address;

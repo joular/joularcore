@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Stop a run that hangs, instead of letting it go on for hours
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: alire-project/setup-alire@v6
+
+      - name: Build the static library
+        run: alr build
+
+      - name: Build the relocatable (shared) library
+        run: alr exec -- gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable -p
+
+      - name: Build the Ada example
+        run: alr exec -- gprbuild -P example/example.gpr -p
+
+      - name: Build and run the C example (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          alr exec -- make -C example/c
+          # The example reads until Ctrl+C, so send it one after a few seconds
+          # It must then stop on its own and report success, which checks it closes cleanly
+          timeout --signal=INT 5 ./example/c/example_c
+
+      - name: Build and run the C example (Windows)
+        if: runner.os == 'Windows'
+        # The Makefile uses Unix commands, so run it in bash rather than in PowerShell
+        shell: bash
+        run: |
+          # make is not installed on the Windows runner, unlike gcc
+          choco install make --no-progress -y
+          alr exec -- make -C example/c
+          # The DLL has to sit next to the program, as Windows looks for it there
+          test -f example/c/example_c.exe
+          ls example/c/*.dll
+          # The example reads until Ctrl+C, so stop it after a few seconds and check it started
+          # Printing its first line proves it found and loaded the DLL
+          timeout 5 ./example/c/example_c.exe > output.txt || true
+          cat output.txt
+          grep -q "Joular Core" output.txt
+
+      - name: Compile-check the macOS and BSD branches (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=macos -f -c
+          alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c

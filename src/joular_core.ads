@@ -9,6 +9,8 @@
 --  Author : Adel Noureddine
 --
 
+-- Joular Core measures the energy or power consumption of hardware components
+-- The library is not task safe: call Open, Read and Close from a single task/thread
 package Joular_Core is
 
     -- The type for the hardware sources to measure
@@ -50,6 +52,8 @@ package Joular_Core is
 
     -- Take one reading for each of the hardware sources set to True in Sources
     -- Returns a Reading type: a list of measurement (value, unit) for each hardware source
+    -- A source that fails to answer reports a value of zero (with Available still True)
+    -- Energy counters (i.e., RAPL) wrap after a few minutes under load, so read at least once per minute to not miss a wrap
     function Read (Sources : in Source_List := All_Sources) return Reading;
 
     -- Return True if Open procedure was already called and not closed

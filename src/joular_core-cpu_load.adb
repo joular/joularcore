@@ -10,8 +10,8 @@
 --
 
 #if PJ_LINUX then
-with Ada.Text_IO; use Ada.Text_IO;
 with GNAT.String_Split; use GNAT;
+with Joular_Core.File_Utils; use Joular_Core.File_Utils;
 #end if;
 
 package body Joular_Core.CPU_Load is
@@ -40,7 +40,6 @@ package body Joular_Core.CPU_Load is
     -- which is the time spent in user mode, in user mode at a low priority (nice), in system mode, in the idle task, waiting for I/O, handling interrupts, handling soft interrupts, and stolen by the hypervisor of a virtual machine
     -- The two columns that follow those eight, guest and guest_nice, are left out, as the kernel already counts them inside user and nice
     function Read_Times return CPU_Times is
-        F_Name : File_Type;
         Subs : String_Split.Slice_Set;
         Times : CPU_Times;
 
@@ -48,20 +47,11 @@ package body Joular_Core.CPU_Load is
         function Column (Index : in String_Split.Slice_Number) return Long_Long_Integer is
             (Long_Long_Integer'Value (String_Split.Slice (Subs, Index)));
     begin
-        Open (F_Name, In_File, Stat_File);
-
-        -- File empty, return Times struct (which is at 0 by default)
-        if End_Of_File (F_Name) then
-            Close (F_Name);
-            return Times;
-        end if;
-
-        -- Slice the read file
+        -- Slice the first line of the file (an unreadable file gives an empty line, rejected below)
         String_Split.Create (S => Subs,
-                             From => Get_Line (F_Name),
+                             From => Read_First_Line (Stat_File),
                              Separators => " ",
                              Mode => String_Split.Multiple);
-        Close (F_Name);
 
         -- The line must hold the name and the eight columns (so 9 slices), and must be the one totalling every core (so "cpu") rather than the one of a single core, "cpu0"
         if Integer (String_Split.Slice_Count (Subs)) < 9
@@ -81,9 +71,6 @@ package body Joular_Core.CPU_Load is
         return Times;
     exception
         when others =>
-            if Is_Open (F_Name) then
-                Close (F_Name);
-            end if;
             return (others => <>);
     end Read_Times;
 

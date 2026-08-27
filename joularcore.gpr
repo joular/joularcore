@@ -50,8 +50,32 @@ library project Joularcore is
     for Library_Kind use Library_Type;
     for Create_Missing_Dirs use "True";
 
+    -- The relocatable (shared) library is stand-alone and encapsulated: it carries the Ada runtime and starts itself up when loaded, so programs in other languages (C, Python, Java, Rust, etc.) can simply load it and call the functions of include/joularcore.h, with nothing else needed
+    case Library_Type is
+        when "relocatable" =>
+            for Library_Interface use ("Joular_Core", "Joular_Core.C_API");
+
+            case PJ_OS is
+                when "macos" =>
+                    -- gprbuild cannot encapsulate on macOS, so the library loads the Ada runtime from its own file there
+                    for Library_Standalone use "standard";
+                when others =>
+                    for Library_Standalone use "encapsulated";
+            end case;
+
+            case PJ_OS is
+                when "linux" | "bsd" =>
+                    for Library_Version use "libJoular_Core.so.0";
+                when others =>
+                    null;
+            end case;
+
+        when others =>
+            null;
+    end case;
+
     package Compiler is
-        for Switches ("Ada") use ("-O3", "-gnat2012") & Defines;
+        for Switches ("Ada") use ("-O3", "-gnat2012", "-gnatwa") & Defines;
     end Compiler;
 
     package Binder is

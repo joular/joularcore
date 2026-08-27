@@ -4,10 +4,21 @@
 # Ada Library Information
 *.ali
 
+# Build folders (also matches example/obj and tests/obj)
 obj/
 lib/
-.vscode/
-.DS_Store
-example/
+
+# Built example and test programs
+example/example_joular_core
+example/c/example_c
+example/c/*.dll
+example/python/__pycache__
+*.exe
+
+# Alire generated folders
 config/
 alire/
+
+# Editor and OS files
+.vscode/
+.DS_Store

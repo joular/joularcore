@@ -9,8 +9,6 @@
 --  Author : Adel Noureddine
 --
 
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
-
 with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
 with Joular_Core.CPU_Monitor; use Joular_Core.CPU_Monitor;
 with Joular_Core.GPU_Monitor; use Joular_Core.GPU_Monitor;
@@ -19,40 +17,35 @@ with Joular_Core.GPU_Monitor; use Joular_Core.GPU_Monitor;
 package body Joular_Core is
 
     -- Library version number
+    -- Keep it the same as the version in alire.toml
     Version_Number : constant String := "0.0.1";
 
     -- Variable to check if Open was called and not yet closed
     Opened : Boolean := False;
 
-    -- List of components asked to be measured
-    Sources_List_Asked : Source_List := (others => False);
-
     -- List of components that can be read/accessed from the asked ones
     Sources_List_Accessible : Source_List := (others => False);
-
-    -- CPU Platform
-    Platform : Unbounded_String;
 
     --------------------------------------------------
 
     procedure Open (Sources : in Source_List := All_Sources) is
     begin
-        -- Set the list of hardware components asked and accessible
-        Sources_List_Asked := Sources;
+        -- Close existing CPU and GPU sources if opened before and not closed for any reason
+        CPU_Monitor.Stop_Monitoring;
+        GPU_Monitor.Stop_Monitoring;
+        
+        -- Start with no hardware component accessible
         Sources_List_Accessible := (others => False);
 
         -- Check and initialize CPU measurement
-        if Sources_List_Asked (CPU) then
-            -- Detect CPU vendor
-            Platform := To_Unbounded_String (Get_Platform_CPU_Name);
-
-            -- Check if CPU monitoring is available and accessible
+        if Sources (CPU) then
+            -- Detect the CPU vendor or board, then check if CPU monitoring is available and accessible
             -- Also, this function will take a first reading on cumulative counters (i.e., RAPL)
-            Sources_List_Accessible (CPU) := Detect_CPU (To_String (Platform));
+            Sources_List_Accessible (CPU) := Detect_CPU (Get_Platform_CPU_Name);
         end if;
 
         -- Check and initialize GPU measurement
-        if Sources_List_Asked (GPU) then
+        if Sources (GPU) then
             -- Check if GPU monitoring is available and accessible
             -- Also, this function will load the libraries needed (NVML for Nvidia, ADLX for AMD) or check for GPU power files (hwmon sysfs for AMD)
             Sources_List_Accessible (GPU) := Detect_GPU;
@@ -61,6 +54,10 @@ package body Joular_Core is
         Opened := True;
     exception
         when others =>
+            -- If anything failed halfway, stop the monitors so any driver or library already opened is closed
+            -- Both procedures do nothing when their monitor was not started
+            CPU_Monitor.Stop_Monitoring;
+            GPU_Monitor.Stop_Monitoring;
             Sources_List_Accessible := (others => False);
             Opened := True;
     end Open;
@@ -69,20 +66,15 @@ package body Joular_Core is
 
     procedure Close is
     begin
-        if Sources_List_Accessible (CPU) then
-            CPU_Monitor.Stop_Monitoring;
-        end if;
-        
-        if Sources_List_Accessible (GPU) then
-            GPU_Monitor.Stop_Monitoring;
-        end if;
+        CPU_Monitor.Stop_Monitoring;
+        GPU_Monitor.Stop_Monitoring;
         
         Opened := False;
-        Sources_List_Asked := (others => False);
         Sources_List_Accessible := (others => False);
     exception
         when others =>
             Opened := False;
+            Sources_List_Accessible := (others => False);
     end Close;
 
     --------------------------------------------------

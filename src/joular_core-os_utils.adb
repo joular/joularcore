@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
-#if PJ_WINDOWS or PJ_LINUX or PJ_BSD then
+#if PJ_WINDOWS or PJ_LINUX then
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 #end if;
 
@@ -21,14 +21,14 @@ with Ada.Environment_Variables;
 with Ada.Text_IO; use Ada.Text_IO;
 #end if;
 
-#if PJ_MACOS or PJ_BSD then
+#if PJ_MACOS then
 with Interfaces.C; use Interfaces.C;
 with System;
 #end if;
 
 package body Joular_Core.OS_Utils is
 
-#if PJ_WINDOWS or PJ_LINUX or PJ_BSD then
+#if PJ_WINDOWS or PJ_LINUX then
 
     -- From an information (from Windows variable or /proc/cpuinfo in Linux)
     -- Check and return the normalized vendor name or empty string if none found
@@ -62,7 +62,7 @@ package body Joular_Core.OS_Utils is
 
         declare
             CPU_Identifier : constant String := Ada.Environment_Variables.Value ("PROCESSOR_IDENTIFIER");
-            Vendor : Constant String := Get_Vendor_Name (CPU_Identifier);
+            Vendor : constant String := Get_Vendor_Name (CPU_Identifier);
         begin
             if Vendor /= "" then
                 return Vendor;
@@ -87,7 +87,7 @@ package body Joular_Core.OS_Utils is
         
         while not End_Of_File (F_Name) loop
             declare
-                Vendor : Constant String := Get_Vendor_Name (Get_Line (F_Name));
+                Vendor : constant String := Get_Vendor_Name (Get_Line (F_Name));
             begin
                 if Vendor /= "" then
                     Close (F_Name);
