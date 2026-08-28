@@ -31,10 +31,9 @@ jobs:
 
       - name: Build the C example (Windows)
         if: runner.os == 'Windows'
-        # The Makefile uses Unix commands, so run it in bash rather than in PowerShell
-        shell: bash
         run: |
           # make is not installed on the Windows runner, unlike gcc
+          # The Makefile runs its commands in cmd, so the default PowerShell shell of the runner is fine
           choco install make --no-progress -y
           alr exec -- make -C example/c
 

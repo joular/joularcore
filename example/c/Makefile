@@ -15,11 +15,19 @@ LDFLAGS = -L$(LIB_DIR) -lJoular_Core
 # Windows sets OS=Windows_NT, Linux and the others leave it unset
 ifeq ($(OS),Windows_NT)
 
+    # Run the commands below in cmd, the shell every Windows machine has, so make behaves the same whether it was started from PowerShell or from cmd, and no Unix tools (bash, cp, rm) are needed
+    SHELL = cmd.exe
+    .SHELLFLAGS = /c
+
     PJ_OS = windows
     EXE = example_c.exe
 
     # Windows has no way to record where the library is, but looks for it next to the program, so put a copy there
-    COPY_LIBRARY = cp $(LIB_DIR)/*.dll .
+    # The commands of cmd only accept backslashes in paths, hence the slashes of LIB_DIR turned around
+    COPY_LIBRARY = copy /Y $(subst /,\,$(LIB_DIR))\*.dll .
+
+    RUN = .\$(EXE)
+    DELETE = del /Q
 
 else
 
@@ -31,6 +39,9 @@ else
 
     # Nothing to copy
     COPY_LIBRARY = true
+
+    RUN = ./$(EXE)
+    DELETE = rm -f
 
     # On macOS only, build the macOS version of the library, and record the folder of the Ada runtime too, as the library does not carry it there
     ifeq ($(shell uname),Darwin)
@@ -51,10 +62,10 @@ $(EXE): main.c $(ROOT)/include/joularcore.h
 	$(COPY_LIBRARY)
 
 run: all
-	./$(EXE)
+	$(RUN)
 
 clean:
-	rm -f example_c example_c.exe *.dll
+	$(DELETE) example_c example_c.exe *.dll
 
 # Build the library before the example, even when asked to run several jobs at once
 .NOTPARALLEL:
