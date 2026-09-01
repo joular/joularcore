@@ -12,7 +12,7 @@
 /*
  * C interface of Joular Core, a library measuring the energy or power consumption of hardware components (CPU and GPU)
  *
- * Use it with the relocatable (shared) build of the library (libJoular_Core.so on Linux, Joular_Core.dll on Windows), which starts itself up when loaded: no other initialization call is needed
+ * Use it with the relocatable (shared) build of the library (libJoular_Core.so on Linux, Joular_Core.dll on Windows, libJoular_Core.dylib on macOS), which starts itself up when loaded: no other initialization call is needed
  *
  * The library is not thread safe: call joular_open, joular_read and joular_close from a single thread
  *

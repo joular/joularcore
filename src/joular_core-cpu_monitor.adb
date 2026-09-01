@@ -11,11 +11,12 @@
 
 with Joular_Core.RAPL; use Joular_Core.RAPL;
 with Joular_Core.RPI; use Joular_Core.RPI;
+with Joular_Core.Powermetrics; use Joular_Core.Powermetrics;
 
 package body Joular_Core.CPU_Monitor is
 
     -- CPU driver method to get energy/power readings
-    type Driver_Kind is (None, RAPL_Counter, RPI_Models); --, Powermetrics for macOS later
+    type Driver_Kind is (None, RAPL_Counter, RPI_Models, Apple_Powermetrics);
 
     -- Driver detected and used
     Driver : Driver_Kind := None;
@@ -25,6 +26,12 @@ package body Joular_Core.CPU_Monitor is
     function Detect_CPU (Platform : in String) return Boolean is
     begin
         Driver := None;
+
+        -- Check Apple Silicon first, as it is the only CPU of the Macs supported and has neither RAPL nor a board model
+        if Platform = "apple" and then Powermetrics.Is_Accessible then
+            Driver := Apple_Powermetrics;
+            return True;
+        end if;
 
         -- Check RAPL first (most common usecase)
         if Platform /= "rpi" and then RAPL.Is_Accessible then
@@ -60,6 +67,13 @@ package body Joular_Core.CPU_Monitor is
                     Unit => Power);
         end if;
 
+        if Driver = Apple_Powermetrics then
+            -- powermetrics reports the power drawn by the CPU of the chip over its last sample, in watts
+            return (Available => True,
+                    Value => Powermetrics.Get_CPU_Power,
+                    Unit => Power);
+        end if;
+
         -- No driver available, nothing to read so return empty measurement
         return (others => <>);
     end Get_CPU_Reading;
@@ -74,6 +88,10 @@ package body Joular_Core.CPU_Monitor is
 
         if Driver = RPI_Models then
             RPI.Close;
+        end if;
+
+        if Driver = Apple_Powermetrics then
+            Powermetrics.Close;
         end if;
 
         Driver := None;
