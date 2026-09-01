@@ -1,6 +1,6 @@
 name = "joularcore"
 description = "Library to monitor hardware components' energy consumption on all OSes"
-version = "0.0.1"
+version = "0.0.2"
 
 long-description = """
 Joular Core measures the energy or power consumption of hardware components:
