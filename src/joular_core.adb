@@ -13,7 +13,6 @@ with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
 with Joular_Core.CPU_Monitor; use Joular_Core.CPU_Monitor;
 with Joular_Core.GPU_Monitor; use Joular_Core.GPU_Monitor;
 
-
 package body Joular_Core is
 
     -- Library version number
