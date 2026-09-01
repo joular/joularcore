@@ -17,19 +17,23 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 |---|---|---|---|---|
 | CPU | Intel, AMD | Linux | RAPL through powercap sysfs | Energy (joules) |
 | CPU | Intel, AMD | Windows | RAPL MSR through [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
+| CPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 | CPU | Raspberry Pi | Linux | Regression power models | Power (watts) |
 | GPU | Nvidia cards | Linux, Windows | NVML (installed with the Nvidia driver) | Power (watts) |
 | GPU | AMD cards | Linux | amdgpu hwmon sysfs | Power (watts) |
 | GPU | AMD cards | Windows | ADLX (installed with the AMD driver) | Power (watts) |
+| GPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 
 For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board.
-macOS and BSD support is planned and will come in a future version.
+On macOS, only Apple Silicon Macs are supported: their CPU and the GPU built in the same chip are both read from powermetrics, one reading each.
+Mac Intel are not supported. BSD support is planned and will come in a future version.
 
 ## Required privileges
 
 - **Linux CPU (RAPL)**: reading `energy_uj` needs elevated access (root or read permissions) on most kernels. Run your program with `sudo`, or give the powercap files read permission.
 - **Windows CPU (RAPL)**: install [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver). The easiest way to install a signed version is through the [Scaphandre installer](https://github.com/hubblo-org/scaphandre/releases/download/v1.0.0/scaphandre_v1.0.0_installer.exe).
-- Raspberry Pi models and GPU readings need no special privileges.
+- **macOS CPU and GPU (powermetrics)**: `powermetrics` only runs as the superuser, so run your program with `sudo`. Without it, both sources are simply reported as not available.
+- Raspberry Pi models, and GPU readings on Linux and Windows, need no special privileges.
 
 ## Building
 
@@ -45,7 +49,7 @@ Or directly with GNAT:
 gprbuild -P joularcore.gpr
 ```
 
-The build produces a static library by default, and will detect the OS to compile the appropriate version. You can specify a specific OS to compile with `-XPJ_OS` (ex. `-XPJ_OS=windows`) to gprbuild (Alire sets it on its own).
+The build produces a static library by default, and will detect the OS to compile the appropriate version. Only Windows is detected on its own though, every other OS falling back to Linux, so building on macOS with gprbuild directly needs `-XPJ_OS=macos`. Any other OS is specified the same way (ex. `-XPJ_OS=windows`). Alire sets it on its own.
 
 For other library types (shared, etc.), set `-XJOULARCORE_LIBRARY_TYPE`:
 
@@ -53,7 +57,7 @@ For other library types (shared, etc.), set `-XJOULARCORE_LIBRARY_TYPE`:
 gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable
 ```
 
-`relocatable` builds the shared library (`libJoular_Core.so` / `.dll`) that carries the C interface, is stand-alone (it starts itself up when loaded), and on Linux and Windows is encapsulated (it carries the Ada runtime too, so it is one self-contained file).
+`relocatable` builds the shared library (`libJoular_Core.so` / `.dll` / `.dylib`) that carries the C interface, is stand-alone (it starts itself up when loaded), and on Linux and Windows is encapsulated (it carries the Ada runtime too, so it is one self-contained file). On macOS it cannot be encapsulated, so the Ada runtime stays a file of its own that has to be found when the library is loaded: the Makefiles of the examples take care of it, as shown below.
 
 ## Using from Ada
 
@@ -119,7 +123,7 @@ Then compile the C program:
 gcc example/c/main.c -Iinclude -Llib/relocatable -lJoular_Core -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
 ```
 
-`-I` is the folder holding `joularcore.h`, `-L` and `-l` the library to link with, and `-rpath` the folder where the program looks for the library when it runs. Without `-rpath`, the program still compiles but stops on start with a "library not loaded" error, unless you set `LD_LIBRARY_PATH` yourself. Windows has no `-rpath`: put a copy of the DLL next to the program instead.
+`-I` is the folder holding `joularcore.h`, `-L` and `-l` the library to link with, and `-rpath` the folder where the program looks for the library when it runs. Without `-rpath`, the program still compiles but stops on start with a "library not loaded" error, unless you set `LD_LIBRARY_PATH` yourself. Windows has no `-rpath`: put a copy of the DLL next to the program instead. On macOS, add a second `-rpath` for the folder of the Ada runtime (`gnatls -v | grep adalib`), which the library does not carry there.
 
 ## Using from Python
 
@@ -148,6 +152,8 @@ lib.joular_close()
 
 A full example program is in [example/python/main.py](example/python/main.py). Like the C one, it reads once per second until stopped with Ctrl+C, which closes the sources cleanly. It comes with a [Makefile](example/python/Makefile) that builds the shared library. Note that it puts Python's Ctrl+C handler back after loading the library: the Ada runtime installs its own while it starts up, and without that line Ctrl+C is ignored.
 
+On macOS, the loader is told where the Ada runtime is through `DYLD_LIBRARY_PATH`, which `sudo` drops for the Python shipped with the system. Reading the CPU and the GPU there needs both, so run it as root with a Python of your own (Homebrew's, for example), or with `sudo env DYLD_LIBRARY_PATH=...`.
+
 Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and every other language with a C FFI work the same way.
 
 ## How to read the measurements
@@ -157,6 +163,7 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 - A source that is not present, not supported, or not accessible is reported as **not available**, which will not prevent other sources from working (i.e., CPU not available but GPU is available, the library will continue working as this is not an error).
 - A source that was available but stops answering reports a value of **zero**.
 - Energy counters (for RAPL) wrap after a few minutes under load, so **read frequently** to not miss a wrap (at least once per minute). The library handles the wrap directly.
+- On macOS, the value is the **average power over the last second**, the interval powermetrics samples at. Opening the sources waits for that first sample, so it takes about a second there.
 - The library current only reads the **PKG domain of the main CPU socket**, and the **first GPU** found.
 - The library is **not thread safe**: call open, read and close from a single thread, as one monitoring loop is the intended use for the current version.
 

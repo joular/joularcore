@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -25,8 +25,8 @@ jobs:
       - name: Build the Ada example
         run: alr exec -- gprbuild -P example/example.gpr -p
 
-      - name: Build the C example (Linux)
-        if: runner.os == 'Linux'
+      - name: Build the C example (Linux and macOS)
+        if: runner.os != 'Windows'
         run: alr exec -- make -C example/c
 
       - name: Build the C example (Windows)
@@ -37,8 +37,6 @@ jobs:
           choco install make --no-progress -y
           alr exec -- make -C example/c
 
-      - name: Compile-check the macOS and BSD branches (Linux)
+      - name: Compile-check the BSD branch (Linux)
         if: runner.os == 'Linux'
-        run: |
-          alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=macos -f -c
-          alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c
+        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c

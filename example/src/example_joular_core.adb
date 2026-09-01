@@ -10,7 +10,7 @@
 --
 
 --  Prints the energy and power consumed by the CPU and the GPU every second, until stopped with Ctrl+C
---  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL MSR) and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
+--  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL MSR), macOS (Apple Silicon through powermetrics), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
 
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings; use Ada.Strings;
