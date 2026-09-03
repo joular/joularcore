@@ -58,7 +58,7 @@ package body Joular_Core is
             CPU_Monitor.Stop_Monitoring;
             GPU_Monitor.Stop_Monitoring;
             Sources_List_Accessible := (others => False);
-            Opened := True;
+            Opened := False;
     end Open;
 
     --------------------------------------------------
