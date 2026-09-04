@@ -54,6 +54,7 @@ package Joular_Core is
     -- Returns a Reading type: a list of measurement (value, unit) for each hardware source
     -- A source that fails to answer reports a value of zero (with Available still True)
     -- Energy counters (i.e., RAPL) wrap after a few minutes under load, so read at least once per minute to not miss a wrap
+    -- The exception is the meter Windows publishes, which hands over a counter Windows has already added up across those wraps
     function Read (Sources : in Source_List := All_Sources) return Reading;
 
     -- Return True if Open procedure was already called and not closed

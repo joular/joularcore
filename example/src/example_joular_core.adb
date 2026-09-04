@@ -10,12 +10,14 @@
 --
 
 --  Prints the energy and power consumed by the CPU and the GPU every second, until stopped with Ctrl+C
---  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL MSR), macOS (Apple Silicon through powermetrics), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
+--  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL through Windows' Energy Meter Interface or through the MSR registers), macOS (Apple Silicon through powermetrics), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
 --
---  On Windows the RAPL registers are reached through one of two drivers, and naming one on the command line tries that one alone:
+--  On Windows the RAPL counter is reached in one of three ways, and naming one on the command line tries that one alone:
+--      example_joular_core emi
 --      example_joular_core pawnio
 --      example_joular_core hubblo
---  Naming one sets JOULARCORE_WINDOWS_RAPL before the library is opened, so it does not try PawnIO first and fall back to Hubblo's driver
+--  Naming one sets JOULARCORE_WINDOWS_RAPL before the library is opened, so it does not try the Energy Meter Interface first and fall back to the drivers reading the registers
+--  emi is the meter that doesn't need a driver or admin rights
 --  PawnIO only answers a program running as administrator, so trying it needs an elevated terminal, while Hubblo's driver works from any terminal
 --
 --  A number stops the program after that many readings instead of running until Ctrl+C, which is what makes the run scriptable:
@@ -194,17 +196,21 @@ procedure Example_Joular_Core is
         if not Stats.Available then
             Put_Line (Failed_Colour & Which & " did not open" & Reset);
 
-            --  The two Windows drivers do not ask for the same rights, so what to try next depends on which one was asked for
-            --  PawnIO only answers a program running as administrator, which is the usual reason it does not answer while being installed and running, while Hubblo's driver reads from any terminal and is never held back by that
-            if To_Lower (Driver) = "pawnio" then
+            --  The three Windows readers do not ask for the same rights, so what to try next depends on which one was asked for
+            --  PawnIO only answers a program running as administrator, which is the usual reason it does not answer while being installed and running, while Energy Meter Interface and Hubblo's driver read from any terminal and are never held back by that
+            if To_Lower (Driver) = "emi" then
+                Put_Line ("The Energy Meter Interface (EMI) needs nothing installed and no elevated terminal, so this machine simply publishes none holding a RAPL package counter");
+                Put_Line ("Windows 11 publishes one on the processors whose driver does, while Windows 10 only does on a machine carrying a meter of its own");
+                Put_Line ("Trying pawnio or hubblo reads the registers directly instead, if either driver is installed");
+            elsif To_Lower (Driver) = "pawnio" then
                 Put_Line ("PawnIO only answers a program running as administrator, so run this from an elevated terminal");
                 Put_Line ("Failing that, it is not installed, is not running, or its module turned this processor down");
                 Put_Line ("Trying hubblo instead reads without an elevated terminal, if that driver is installed");
             elsif To_Lower (Driver) = "hubblo" then
                 Put_Line ("Hubblo's driver needs no elevation, so it is not installed, is not running, or this processor has no RAPL counter to read");
             else
-                Put_Line ("On Windows, PawnIO is tried first and only answers an elevated terminal, and Hubblo's driver is tried after it and needs none");
-                Put_Line ("So neither is installed, neither is running, or this processor has no RAPL counter to read");
+                Put_Line ("On Windows, Energy Meter Interface is tried first and needs no additional driver, then PawnIO which only answers an elevated terminal, then Hubblo's driver which needs none");
+                Put_Line ("So this machine publishes no such meter, neither driver is installed, neither is running, or this processor has no RAPL counter to read");
             end if;
 
             return;
@@ -242,10 +248,10 @@ procedure Example_Joular_Core is
             declare
                 Wanted : constant String := To_Lower (Argument (I));
             begin
-                if Wanted = "pawnio" or else Wanted = "hubblo" then
+                if Wanted = "emi" or else Wanted = "pawnio" or else Wanted = "hubblo" then
                     --  The library reads this when it is opened, which has not happened yet
                     Ada.Environment_Variables.Set (Driver_Variable, Wanted);
-                    Put_Line ("Windows RAPL driver: " & Wanted & ", and not the other one");
+                    Put_Line ("Windows RAPL reader: " & Wanted & ", and not the others");
                 else
                     --  Anything that is not a driver is a count of readings, and anything that is neither is pointed out rather than passed over
                     Wanted_Readings := Natural'Value (Wanted);
@@ -253,7 +259,7 @@ procedure Example_Joular_Core is
                 end if;
             exception
                 when others =>
-                    Put_Line ("Ignoring " & Argument (I) & ", expected pawnio, hubblo, or a number of readings");
+                    Put_Line ("Ignoring " & Argument (I) & ", expected emi, pawnio, hubblo, or a number of readings");
             end;
         end loop;
     end Read_Arguments;

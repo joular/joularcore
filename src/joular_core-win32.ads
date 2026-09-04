@@ -48,6 +48,18 @@ private package Joular_Core.Win32 is
         hTemplateFile : System.Address) return HANDLE;
     pragma Import (Stdcall, CreateFileA, "CreateFileA");
 
+    --  The same as CreateFileA, but taking the name in wide characters
+    --  Windows gives the paths of the devices it publishes in wide characters, so they are passed on as they are rather than being converted
+    function CreateFileW
+       (lpFileName : System.Address;
+        dwDesiredAccess : DWORD;
+        dwShareMode : DWORD;
+        lpSecurityAttributes : System.Address;
+        dwCreationDisposition : DWORD;
+        dwFlagsAndAttributes : DWORD;
+        hTemplateFile : System.Address) return HANDLE;
+    pragma Import (Stdcall, CreateFileW, "CreateFileW");
+
     --  Sends one request to the driver: the control code says what to do, the input buffer carries what the request needs, and the driver writes its answer into the output buffer. Returns zero when the request failed
     function DeviceIoControl
        (hDevice : HANDLE;

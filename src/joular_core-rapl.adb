@@ -12,7 +12,7 @@
 #if PJ_LINUX then
 with Joular_Core.RAPL_Powercap;
 #elsif PJ_WINDOWS then
-with Joular_Core.RAPL_MSR_Windows;
+with Joular_Core.RAPL_Windows;
 #else
 with Joular_Core.RAPL_None;
 #end if;
@@ -23,7 +23,7 @@ package body Joular_Core.RAPL is
 #if PJ_LINUX then
     package Reader renames Joular_Core.RAPL_Powercap;
 #elsif PJ_WINDOWS then
-    package Reader renames Joular_Core.RAPL_MSR_Windows;
+    package Reader renames Joular_Core.RAPL_Windows;
 #else
     package Reader renames Joular_Core.RAPL_None;
 #end if;
