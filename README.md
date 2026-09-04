@@ -16,7 +16,7 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 | Component | Hardware | OS | Method | Reports |
 |---|---|---|---|---|
 | CPU | Intel, AMD | Linux | RAPL through powercap sysfs | Energy (joules) |
-| CPU | Intel, AMD | Windows | RAPL MSR through [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
+| CPU | Intel, AMD | Windows | RAPL MSR through [PawnIO](https://pawnio.eu) or [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
 | CPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 | CPU | Raspberry Pi | Linux | Regression power models | Power (watts) |
 | GPU | Nvidia cards | Linux, Windows | NVML (installed with the Nvidia driver) | Power (watts) |
@@ -31,9 +31,23 @@ Mac Intel are not supported. BSD support is planned and will come in a future ve
 ## Required privileges
 
 - **Linux CPU (RAPL)**: reading `energy_uj` needs elevated access (root or read permissions) on most kernels. Run your program with `sudo`, or give the powercap files read permission.
-- **Windows CPU (RAPL)**: install [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver). The easiest way to install a signed version is through the [Scaphandre installer](https://github.com/hubblo-org/scaphandre/releases/download/v1.0.0/scaphandre_v1.0.0_installer.exe).
+- **Windows CPU (RAPL)**: reading the registers needs a driver. We support two drivers (install only one of them).
+  - [PawnIO](https://pawnio.eu) is the recommended one: it is maintained and properly signed, and its installer is all that is needed, as Joular Core carries the modules it loads. This is the one used when both are installed. It needed elevated access, so run the program using the library with such access (i.e., from a terminal with administrative rights).
+  - [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) still works and is used when PawnIO is not there. It does not require elevated access, but its development has paused and not actively maintained by their authors. The easiest way to install a signed version is through the [Scaphandre installer](https://github.com/hubblo-org/scaphandre/releases/download/v1.0.0/scaphandre_v1.0.0_installer.exe).
 - **macOS CPU and GPU (powermetrics)**: `powermetrics` only runs as the superuser, so run your program with `sudo`. Without it, both sources are simply reported as not available.
 - Raspberry Pi models, and GPU readings on Linux and Windows, need no special privileges.
+
+### Choosing the Windows RAPL driver
+
+Joular Core looks for PawnIO first and falls back to Hubblo's driver, keeping the first that answers. Nothing has to be configured for that.
+The two drivers reach the same registers, so they report the same energy. Setting `JOULARCORE_WINDOWS_RAPL` picks one instead of trying both.
+
+```
+set JOULARCORE_WINDOWS_RAPL=pawnio
+set JOULARCORE_WINDOWS_RAPL=hubblo
+```
+
+Any other value, including not setting it at all, tries PawnIO first and then Hubblo.
 
 ## Building
 
@@ -89,6 +103,12 @@ A full example program is in [example/src/example_joular_core.adb](example/src/e
 ```bash
 gprbuild -P example/example.gpr
 ./example/example_joular_core
+```
+
+It takes two optional arguments, in any order. On Windows, `pawnio` or `hubblo` indicates which RAPL driver to use (rather than trying both), and a number stops the program after that many readings instead of running until Ctrl+C. A summary is printed at the end.
+
+```bash
+./example/example_joular_core pawnio 10
 ```
 
 With Alire, add the library to your project with `alr with joularcore`.
@@ -170,6 +190,26 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 ## Adding new hardware or a new OS
 
 Each hardware component is one package with three functions: `Is_Accessible` (detect and open), `Get_Power` or `Get_Energy` (one reading), and `Close`. The monitors ([CPU_Monitor](src/joular_core-cpu_monitor.adb), [GPU_Monitor](src/joular_core-gpu_monitor.adb)) try each package in order and keep the first one that answers. To support new hardware, write such a package and add it to the monitor's detection. OS specific code is selected with preprocessor symbols (`PJ_LINUX`, `PJ_WINDOWS`, `PJ_MACOS`, `PJ_BSD`) set by [joularcore.gpr](joularcore.gpr).
+
+Windows RAPL splits this one step further, as two drivers read the same registers. [RAPL_MSR_Windows](src/joular_core-rapl_msr_windows.adb) keeps the vendor detection and the counter abstract, and hands the reading of a single register to one of two interchangeable packages, [MSR_PawnIO](src/joular_core-msr_pawnio.adb) and [MSR_Hubblo](src/joular_core-msr_hubblo.adb), which share the small set of Win32 bindings in [Win32](src/joular_core-win32.ads). Supporting a third driver means writing another such package with `Open`, `Read` and `Close`, and adding it to the list tried in `Open`.
+
+## Third party components
+
+Joular Core carries two [PawnIO modules](https://github.com/namazso/PawnIO.Modules), `IntelMSR.bin` and `AMDFamily17.bin`, taken byte for byte from release 0.2.11. The PawnIO driver reads no register on its own: it runs modules, and checks their signature before doing so, so they are shipped as they are and cannot be rebuilt here.
+
+They are licensed under the GNU Lesser General Public License version 2.1 or later, copyright namazso and contributors. A copy of that license is in [tools/pawnio/COPYING](tools/pawnio/COPYING), next to the modules themselves.
+
+They are turned into [joular_core-pawnio_modules.ads](src/joular_core-pawnio_modules.ads) by [tools/gen_pawnio_modules.py](tools/gen_pawnio_modules.py), which is also how that file is regenerated when a newer release is taken:
+
+```bash
+python3 tools/gen_pawnio_modules.py > src/joular_core-pawnio_modules.ads
+```
+
+The SHA-256 of each module is pinned in that script, which refuses to write anything when a module on disk is not the one it expects, so taking a newer release means updating those digests along with the files. Running it with `--check` writes nothing and only reports whether the modules, their digests and the committed package still agree, which is what CI runs on every push:
+
+```bash
+python3 tools/gen_pawnio_modules.py --check
+```
 
 ## 📜 License
 

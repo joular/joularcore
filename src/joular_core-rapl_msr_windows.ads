@@ -9,7 +9,9 @@
 --  Author : Adel Noureddine
 --
 
--- This package is for RAPL for Windows (reading MSR directly using Hubblo's RAPL driver for Windows)
+-- This package is for RAPL for Windows (reading the MSR directly through a driver)
+-- Reading a register needs a driver, and either of two is used: PawnIO first, and Hubblo's RAPL driver when PawnIO is not there or not supporting the processor
+-- This package keeps the vendor detection and the counter abstract, and hands the reading of a single register to Joular_Core.MSR_PawnIO or Joular_Core.MSR_Hubblo
 private package Joular_Core.RAPL_MSR_Windows is
 
     -- Open the RAPL counter (driver or files)

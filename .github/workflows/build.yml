@@ -40,3 +40,8 @@ jobs:
       - name: Compile-check the BSD branch (Linux)
         if: runner.os == 'Linux'
         run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c
+
+      - name: Check the PawnIO modules against the package carrying them (Linux)
+        if: runner.os == 'Linux'
+        # Checks the pinned SHA-256 of tools/pawnio/*.bin, then that src/joular_core-pawnio_modules.ads is still what those modules produce, so a module and the package carrying it cannot drift apart unnoticed
+        run: python3 tools/gen_pawnio_modules.py --check
