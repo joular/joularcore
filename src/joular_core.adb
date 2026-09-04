@@ -17,7 +17,7 @@ package body Joular_Core is
 
     -- Library version number
     -- Keep it the same as the version in alire.toml
-    Version_Number : constant String := "0.0.2";
+    Version_Number : constant String := "0.0.3";
 
     -- Variable to check if Open was called and not yet closed
     Opened : Boolean := False;
