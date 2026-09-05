@@ -196,6 +196,7 @@ procedure Example_Joular_Core is
         if not Stats.Available then
             Put_Line (Failed_Colour & Which & " did not open" & Reset);
 
+#if PJ_WINDOWS then
             --  The three Windows readers do not ask for the same rights, so what to try next depends on which one was asked for
             --  PawnIO only answers a program running as administrator, which is the usual reason it does not answer while being installed and running, while Energy Meter Interface and Hubblo's driver read from any terminal and are never held back by that
             if To_Lower (Driver) = "emi" then
@@ -212,6 +213,18 @@ procedure Example_Joular_Core is
                 Put_Line ("On Windows, Energy Meter Interface is tried first and needs no additional driver, then PawnIO which only answers an elevated terminal, then Hubblo's driver which needs none");
                 Put_Line ("So this machine publishes no such meter, neither driver is installed, neither is running, or this processor has no RAPL counter to read");
             end if;
+#elsif PJ_MACOS then
+            --  powermetrics needs root
+            Put_Line ("macOS reports the power of the chip through /usr/bin/powermetrics, which only answers a program running as root, so run this with sudo");
+            Put_Line ("Failing that, this is an Intel Mac: only Apple Silicon is read here, as those are the Macs whose chip reports its power");
+#elsif PJ_LINUX then
+            --  Linux reads a counter of the processor, or falls back to a power model of the board when there is no counter to read
+            Put_Line ("On Linux the RAPL counter is read from /sys/class/powercap/intel-rapl, whose energy_uj only root reads on most distributions, so run this with sudo");
+            Put_Line ("Failing that, this processor has no RAPL counter, or the module publishing it is not loaded (AMD processors are read from that same folder)");
+            Put_Line ("On a Raspberry Pi or another supported board there is no counter at all, and the power comes from a model of the board named in /proc/device-tree/model, so an unsupported board reads nothing");
+#else
+            Put_Line ("BSD systems are not supported yet");
+#end if;
 
             return;
         end if;

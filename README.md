@@ -65,7 +65,7 @@ Or directly with GNAT:
 gprbuild -P joularcore.gpr
 ```
 
-The build produces a static library by default, and will detect the OS to compile the appropriate version. Only Windows is detected on its own though, every other OS falling back to Linux, so building on macOS with gprbuild directly needs `-XPJ_OS=macos`. Any other OS is specified the same way (ex. `-XPJ_OS=windows`). Alire sets it on its own.
+The build produces a static library by default, and detects the OS on its own to compile the appropriate version: Linux, Windows, macOS and the BSDs are each recognised from the target gprbuild reports, so nothing has to be passed. `-XPJ_OS` still overrides it when the version to build is not the one of the machine building it (ex. `-XPJ_OS=windows`). Alire sets it too.
 
 For other library types (shared, etc.), set `-XJOULARCORE_LIBRARY_TYPE`:
 
@@ -106,6 +106,8 @@ A full example program is in [example/src/example_joular_core.adb](example/src/e
 gprbuild -P example/example.gpr
 ./example/example_joular_core
 ```
+
+Reading the CPU needs root on Linux (the RAPL counter in `/sys/class/powercap/intel-rapl` is only readable by root on most distributions) and on macOS (`powermetrics` only answers root), so run it with `sudo` there. On Windows it depends on the reader: the Energy Meter Interface and Hubblo's driver read from any terminal, PawnIO only from an elevated one. When the CPU does not open, the example says what applies to the OS it was built for.
 
 It takes two optional arguments, in any order. On Windows, `emi`, `pawnio` or `hubblo` indicates how the RAPL counter is to be read (rather than trying them in turn), and a number stops the program after that many readings instead of running until Ctrl+C. A summary is printed at the end.
 
