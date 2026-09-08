@@ -65,15 +65,23 @@ package body Joular_Core is
 
     procedure Close is
     begin
-        CPU_Monitor.Stop_Monitoring;
-        GPU_Monitor.Stop_Monitoring;
-        
+        -- Each monitor is closed on its own, so a crash on one doesn't prevent the other from closing
+        begin
+            CPU_Monitor.Stop_Monitoring;
+        exception
+            when others =>
+                null;
+        end;
+
+        begin
+            GPU_Monitor.Stop_Monitoring;
+        exception
+            when others =>
+                null;
+        end;
+
         Opened := False;
         Sources_List_Accessible := (others => False);
-    exception
-        when others =>
-            Opened := False;
-            Sources_List_Accessible := (others => False);
     end Close;
 
     --------------------------------------------------

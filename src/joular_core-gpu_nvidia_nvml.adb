@@ -59,13 +59,95 @@ package body Joular_Core.GPU_Nvidia_NVML is
 
     --------------------------------------------------
 
+#if PJ_WINDOWS then
+
+    -- Get the program files folder on Windows
+    function Program_Files_Folder return String is
+        -- What the shell numbers that folder as
+        CSIDL_PROGRAM_FILES : constant int := 16#26#;
+
+        -- The longest path the call below writes, as it is written in the Windows headers
+        MAX_PATH : constant := 260;
+
+        S_OK : constant int := 0;
+
+        type Get_Folder_Function is access function
+           (Owner : System.Address;
+            Folder : int;
+            Token : System.Address;
+            Flags : unsigned;
+            Path : System.Address) return int;
+        pragma Convention (Stdcall, Get_Folder_Function);
+
+        function To_Get_Folder is
+            new Ada.Unchecked_Conversion (System.Address, Get_Folder_Function);
+
+        Shell : System.Address;
+        Get_Folder : Get_Folder_Function;
+        Buffer : aliased char_array (0 .. MAX_PATH) := (others => nul);
+        Result : int;
+    begin
+        -- The shell library comes from the system folder
+        Shell := Load ("shell32.dll");
+
+        if Shell = System.Null_Address then
+            return "";
+        end if;
+
+        Get_Folder := To_Get_Folder (Find_Symbol (Shell, "SHGetFolderPathA"));
+
+        if Get_Folder = null then
+            Unload (Shell);
+            return "";
+        end if;
+
+        Result := Get_Folder
+           (Owner => System.Null_Address,
+            Folder => CSIDL_PROGRAM_FILES,
+            Token => System.Null_Address,
+            Flags => 0,
+            Path => Buffer'Address);
+
+        Unload (Shell);
+
+        if Result /= S_OK then
+            return "";
+        end if;
+
+        return To_Ada (Buffer);
+    exception
+        when others =>
+            return "";
+    end Program_Files_Folder;
+
+    --------------------------------------------------
+
+#end if;
+
     -- Load NVML (requires the Nvidia driver being installed)
     -- Return the null address when the driver is not installed in the machine
     function Load_NVML return System.Address is
     begin
 #if PJ_WINDOWS then
-        -- On Windows, the library is in the system folder as a DLL
-        return Load ("nvml.dll");
+        -- Check for the driver in the system folder
+        declare
+            Library : constant System.Address := Load ("nvml.dll");
+        begin
+            if Library /= System.Null_Address then
+                return Library;
+            end if;
+        end;
+
+        -- Check for the driver in the program files Nvidia folder
+        declare
+            Folder : constant String := Program_Files_Folder;
+        begin
+            if Folder = "" then
+                return System.Null_Address;
+            end if;
+
+            return Load_From_Path (Folder & "\NVIDIA Corporation\NVSMI\nvml.dll");
+        end;
 #else
         -- On Linux and BSD, the versioned name is the one always present
         declare
@@ -141,8 +223,9 @@ package body Joular_Core.GPU_Nvidia_NVML is
         Milliwatts : aliased unsigned := 0;
     begin
         -- Check that the GPU card still answers, if not return 0
-        -- Get power consumption
-        if Card = System.Null_Address or else NVML_Device_Power (Card, Milliwatts'Access) /= NVML_SUCCESS
+        -- The function is checked as well as the card, so a reading is never taken through a library that is on its way out
+        if Card = System.Null_Address or else NVML_Device_Power = null
+           or else NVML_Device_Power (Card, Milliwatts'Access) /= NVML_SUCCESS
         then
             return 0.0;
         end if;
@@ -161,7 +244,13 @@ package body Joular_Core.GPU_Nvidia_NVML is
     begin
         -- Stops NVML
         if NVML_Shutdown /= null then
-            Ignored := NVML_Shutdown.all;
+            begin
+                Ignored := NVML_Shutdown.all;
+            exception
+                when others =>
+                    null;
+            end;
+
             NVML_Shutdown := null;
         end if;
 
@@ -174,10 +263,6 @@ package body Joular_Core.GPU_Nvidia_NVML is
             Unload (NVML_Library);
             NVML_Library := System.Null_Address;
         end if;
-    exception
-        when others =>
-            NVML_Shutdown := null;
-            NVML_Library := System.Null_Address;
     end Close;
 
 #else

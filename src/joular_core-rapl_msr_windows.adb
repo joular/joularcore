@@ -220,6 +220,11 @@ package body Joular_Core.RAPL_MSR_Windows is
     begin
         -- First, check the vendor, and use proper registers
         if Vendor = "intel" then
+            -- If a processor gives an unsupported energy unit (mainly Intel Atoms)
+            if Has_Unsupported_Energy_Unit then
+                return False;
+            end if;
+
             Power_Unit_MSR := MSR_INTEL_RAPL_POWER_UNIT;
             Energy_MSR := MSR_INTEL_PKG_ENERGY_STATUS;
             Vendor_Is_Intel := True;

@@ -19,6 +19,10 @@ private package Joular_Core.Dynamic_Library is
     -- Returns the null address if the library is not installed
     function Load (Name : in String) return System.Address;
 
+    -- Load a shared library from the full path
+    -- Returns the null address if there is nothing to load there
+    function Load_From_Path (Path : in String) return System.Address;
+
     -- Find a function from an already loaded library
     -- Returns the null address when the library does not have the function
     function Find_Symbol (Library : in System.Address; Name : in String) return System.Address;

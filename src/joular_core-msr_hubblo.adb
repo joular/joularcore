@@ -59,11 +59,15 @@ package body Joular_Core.MSR_Hubblo is
     function Read (MSR : in Unsigned_64; Value : out Unsigned_64) return Boolean is
         FILE_DEVICE_UNKNOWN : constant DWORD := 16#22#;
         ACCESS_READ_WRITE : constant DWORD := 3;
+        METHOD_BUFFERED : constant DWORD := 0; -- Spelled out, as the two other drivers of this library do, rather than left out because it happens to be zero
         -- The driver reads the register from the input buffer and pays no attention to the number in the control code, which is kept as the driver's own tool builds it
+        -- Two registers sharing their low twelve bits build the same number here, which is harmless only while that holds
+        -- It comes from the driver's published source, not from the signed binary actually installed
         Control_Code : constant DWORD :=
             Shift_Left (FILE_DEVICE_UNKNOWN, 16)
             or Shift_Left (ACCESS_READ_WRITE, 14)
-            or Shift_Left (DWORD (MSR and 16#FFF#), 2);
+            or Shift_Left (DWORD (MSR and 16#FFF#), 2)
+            or METHOD_BUFFERED;
         Input : aliased Unsigned_64 := MSR; -- Which register to read, and which processor to read it on in its upper half, which is left at zero for the first one
         Output : aliased Unsigned_64 := 0; -- Read value by the driver
         Bytes_Returned : aliased DWORD := 0; -- How much the driver actually wrote

@@ -30,6 +30,8 @@ Mac Intel are not supported. BSD support is planned and will come in a future ve
 
 ## Required privileges
 
+Joular Core is a library, so the privileges below are needed for the *program using it*.
+
 - **Linux CPU (RAPL)**: reading `energy_uj` needs elevated access (root or read permissions) on most kernels. Run your program with `sudo`, or give the powercap files read permission.
 - **Windows CPU (RAPL)**: if using EMI interface, then there is no special privileges or driver needed. Otherwise, we need specific RAPL driver.
   - The [Energy Meter Interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface) is the one used by default and checked first, and needs **no install and no elevated access**. Windows 11 publishes the RAPL domains of the processor on it, so it works out of the box on those machines. Windows 10 only publishes a meter when the machine carries one of its own, and such a meter rarely measures the processor package, in which case Joular Core turns it down and uses the RAPL drivers below rather than reporting something else as the CPU.
@@ -186,10 +188,23 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 - Others report **power**: the watts being drawn when read (Raspberry Pi models, GPUs).
 - A source that is not present, not supported, or not accessible is reported as **not available**, which will not prevent other sources from working (i.e., CPU not available but GPU is available, the library will continue working as this is not an error).
 - A source that was available but stops answering reports a value of **zero**.
-- Energy counters (for RAPL) wrap after a few minutes under load, so **read frequently** to not miss a wrap (at least once per minute). The library handles the wrap directly. The exception is the Energy Meter Interface (EMI) on Windows, where Windows hands over a counter it has already added up across those wraps.
-- On macOS, the value is the **average power over the last second**, the interval powermetrics samples at. Opening the sources waits for that first sample, so it takes about a second there.
-- The library current only reads the **PKG domain of the main CPU socket**, and the **first GPU** found.
+- On macOS, the value is the **average power over the last sample window**, which powermetrics takes once a second. Reading more often than that hands back the same window again rather than a new measurement, and a window is dropped once it is a few seconds old. Opening the sources waits for a first whole sample, so it takes about a second there.
 - The library is **not thread safe**: call open, read and close from a single thread, as one monitoring loop is the intended use for the current version.
+
+### What each source actually measures
+
+| Source | What the number covers |
+|---|---|
+| RAPL on Linux | **One** package of powercap, the first one whose name begins with `package` |
+| RAPL on Windows | The package domain of the first socket |
+| Raspberry Pi | A model-based estimate: a regression on CPU load, evaluated over the interval between two readings. It is not a reading of the board's actual draw |
+| Nvidia (NVML) | What the card reports for the whole GPU board. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
+| AMD on Linux (hwmon) | Whole GPU board power, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
+| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is settled when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
+| macOS | The CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them |
+
+RAPL counters wrap when they fill, and the library corrects that. The correction only works if less energy was used between two readings than the counter holds. How long the counter takes to fill depends on the energy unit of the processor.
+The Energy Meter Interface (EMI) on Windows correct for the wrap by itself, so Joular Core doesn't need to do the correction.
 
 ## Adding new hardware or a new OS
 

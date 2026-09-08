@@ -52,7 +52,18 @@ package body Joular_Core.RAPL_Powercap is
 
                     -- Take first reading and check it is not zero
                     -- Reading the energy file needs root on most Linux systems
-                    return Read_Value (To_String (Energy_File)) /= 0;
+                    if Read_Value (To_String (Energy_File)) = 0 then
+                        Close;
+                        return False;
+                    end if;
+
+                    -- If the max range file can't be read or reports 0 or a negative value, then the wrap point is unknown and a wrapped reading could only be dropped, so report false
+                    if Read_Value (To_String (Max_Range_File)) <= 0 then
+                        Close;
+                        return False;
+                    end if;
+
+                    return True;
                 end if;
             end;
         end loop;

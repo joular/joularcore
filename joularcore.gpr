@@ -48,6 +48,23 @@ library project Joularcore is
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
     end case;
 
+    -- Check if the processor a 64 bits x86 one, meaning the CPUID instruction can be run on, only useful for Windows when reading RAPL registers
+    -- Build with: gprbuild -XPJ_X86=False
+    Default_X86 := "False";
+    case Host_Target is
+        when "x86_64-windows64" | "x86_64-windows" | "x86_64-darwin"
+           | "x86_64-linux" | "x86_64-freebsd" | "amd64-freebsd"
+           | "x86_64-openbsd" | "x86_64-netbsd" | "x86_64-dragonfly"
+            => Default_X86 := "True";
+        when others
+            => Default_X86 := "False";
+    end case;
+
+    type X86_Kind is ("True", "False");
+    PJ_X86 : X86_Kind := external ("PJ_X86", Default_X86);
+
+    Defines := Defines & ("-gnateDPJ_X86=" & PJ_X86);
+
     -- Library type
     -- static : libJoular_Core.a, linked into the client
     -- relocatable : libJoular_Core.so / .dll / .dylib

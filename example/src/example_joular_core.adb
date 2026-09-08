@@ -28,6 +28,7 @@
 with Ada.Characters.Handling; use Ada.Characters.Handling;
 with Ada.Command_Line; use Ada.Command_Line;
 with Ada.Environment_Variables;
+with Ada.Real_Time; use Ada.Real_Time;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Strings; use Ada.Strings;
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
@@ -37,7 +38,11 @@ with Joular_Core; use Joular_Core;
 
 procedure Example_Joular_Core is
 
-    --  Time between two readings
+    --  Time asked for between two readings
+    --  What a reading actually covers is measured rather than taken to be this: the loop
+    --  also reads, formats and prints, and the scheduler adds what it adds, so the real
+    --  interval is always a little longer and dividing by this one would report a little
+    --  more power than was drawn
     Interval : constant Duration := 1.0;
 
     --  The variable the library reads on Windows to use one RAPL driver instead of trying both
@@ -77,7 +82,8 @@ procedure Example_Joular_Core is
            Available : Boolean := False; --  Whether the source was opened at all
            Readings : Natural := 0; --  How many readings were taken from it
            Answered : Natural := 0; --  How many of them came back with something other than zero
-           Total : Long_Float := 0.0; --  Watts added up, to give the average
+           Energy : Long_Float := 0.0; --  Joules added up
+           Seconds : Long_Float := 0.0; --  Time for the energy measurement
            Lowest : Long_Float := Long_Float'Last;
            Highest : Long_Float := 0.0;
        end record;
@@ -106,20 +112,23 @@ procedure Example_Joular_Core is
     --  Depending on the hardware, the library gives either the energy consumed since the last reading (i.e., RAPL), or the power drawn (i.e., Raspberry Pi models and GPUs)
     --  Each is turned into the other here, according to the time interval, so a reading is printed and compared the same way whichever unit it came in
 
-    function Joules (Data : in Measurement) return Long_Float is
+    --  Over is how long the reading actually covers, measured around the reading itself
+
+    function Joules (Data : in Measurement; Over : in Duration) return Long_Float is
        (case Data.Unit is
            when Energy => Data.Value,
-           when Power => Data.Value * Long_Float (Interval));
+           when Power => Data.Value * Long_Float (Over));
 
-    function Watts (Data : in Measurement) return Long_Float is
+    function Watts (Data : in Measurement; Over : in Duration) return Long_Float is
        (case Data.Unit is
-           when Energy => Data.Value / Long_Float (Interval),
+           when Energy => (if Over > 0.0 then Data.Value / Long_Float (Over) else 0.0),
            when Power => Data.Value);
 
     --  Formats one hardware source as both energy (joules) and power (watts)
     function Image (Colour : in String;
                     Name : in String;
-                    Data : in Measurement) return String is
+                    Data : in Measurement;
+                    Over : in Duration) return String is
     begin
         --  The source was not requested, or is not supported on this device
         --  It is not printed as 0, which would claim the device idles
@@ -128,13 +137,15 @@ procedure Example_Joular_Core is
         end if;
 
         return Colour & Name
-               & " " & Image (Joules (Data)) & " J"
-               & " " & Image (Watts (Data)) & " W"
+               & " " & Image (Joules (Data, Over)) & " J"
+               & " " & Image (Watts (Data, Over)) & " W"
                & Reset;
     end Image;
 
     --  Adds one reading to what is known of a source
-    procedure Record_Reading (Stats : in out Statistics; Data : in Measurement) is
+    procedure Record_Reading (Stats : in out Statistics;
+                              Data : in Measurement;
+                              Over : in Duration) is
         Power : Long_Float;
     begin
         if not Data.Available then
@@ -142,7 +153,7 @@ procedure Example_Joular_Core is
         end if;
 
         Stats.Readings := Stats.Readings + 1;
-        Power := Watts (Data);
+        Power := Watts (Data, Over);
 
         --  A reading of zero is the library saying it could not read the counter, not a device drawing no power at all, so it counts as a reading but is left out of the numbers below
         if Power <= 0.0 then
@@ -150,7 +161,9 @@ procedure Example_Joular_Core is
         end if;
 
         Stats.Answered := Stats.Answered + 1;
-        Stats.Total := Stats.Total + Power;
+
+        Stats.Energy := Stats.Energy + Joules (Data, Over);
+        Stats.Seconds := Stats.Seconds + Long_Float (Over);
 
         if Power < Stats.Lowest then
             Stats.Lowest := Power;
@@ -184,7 +197,9 @@ procedure Example_Joular_Core is
         Put_Line (Natural'Image (Stats.Readings) & " readings,"
                   & Natural'Image (Stats.Readings - Stats.Answered) & " of them zero"
                   & " | " & Image (Stats.Lowest) & " W lowest"
-                  & " | " & Image (Stats.Total / Long_Float (Stats.Answered)) & " W average"
+                  & " | " & Image (if Stats.Seconds > 0.0
+                                   then Stats.Energy / Stats.Seconds
+                                   else 0.0) & " W average"
                   & " | " & Image (Stats.Highest) & " W highest");
     end Put_Summary;
 
@@ -196,6 +211,7 @@ procedure Example_Joular_Core is
         if not Stats.Available then
             Put_Line (Failed_Colour & Which & " did not open" & Reset);
 
+            --  Each OS reads the CPU its own way and asks for its own rights
 #if PJ_WINDOWS then
             --  The three Windows readers do not ask for the same rights, so what to try next depends on which one was asked for
             --  PawnIO only answers a program running as administrator, which is the usual reason it does not answer while being installed and running, while Energy Meter Interface and Hubblo's driver read from any terminal and are never held back by that
@@ -283,6 +299,11 @@ procedure Example_Joular_Core is
 
     Measurements : Reading;
 
+    Previous_Time : Time; --  When the reading before this one was taken
+    Next_Time : Time; --  When the next one is due
+    Now : Time;
+    Covered : Duration; --  How long the reading just taken actually covers
+
 begin
     Put_Line (Ready_Colour & "Joular Core " & Version & Reset);
 
@@ -305,22 +326,31 @@ begin
     Put_Line ("CPU " & (if CPU_Stats.Available then Ready_Colour & "opened" else Failed_Colour & "not available") & Reset
               & " | GPU " & (if GPU_Stats.Available then Ready_Colour & "opened" else Failed_Colour & "not available") & Reset);
 
+    Previous_Time := Clock;
+    Next_Time := Previous_Time;
+
     while not Stop_Asked loop
-        delay Interval;
+        Next_Time := Next_Time + To_Time_Span (Interval);
+        delay until Next_Time;
 
         exit when Stop_Asked;
 
         --  Take one reading of all the hardware sources opened above
         Measurements := Read;
 
-        Record_Reading (CPU_Stats, Measurements (CPU));
-        Record_Reading (GPU_Stats, Measurements (GPU));
+        --  How long this reading actually covers, measured rather than assumed to be Interval
+        Now := Clock;
+        Covered := To_Duration (Now - Previous_Time);
+        Previous_Time := Now;
+
+        Record_Reading (CPU_Stats, Measurements (CPU), Covered);
+        Record_Reading (GPU_Stats, Measurements (GPU), Covered);
         Taken := Taken + 1;
 
         Put (Clear_Line
-             & Image (CPU_Colour, "CPU", Measurements (CPU))
+             & Image (CPU_Colour, "CPU", Measurements (CPU), Covered)
              & " | "
-             & Image (GPU_Colour, "GPU", Measurements (GPU)));
+             & Image (GPU_Colour, "GPU", Measurements (GPU), Covered));
         Flush;
 
         --  Only when a count was asked for, as zero means running until Ctrl+C

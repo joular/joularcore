@@ -41,6 +41,28 @@ jobs:
         if: runner.os == 'Linux'
         run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c
 
+      # Windows gets the processor with CPUID, which only compiles on an x86 (not ARM) CPU
+      # Linux runner here is x86, so we test that too for Windows
+      - name: Compile-check the Windows branch (Linux, x86)
+        if: runner.os == 'Linux'
+        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=windows -XPJ_X86=True -f -c
+
+      # The examples take a number of readings and stop
+      - name: Run the examples for a few readings
+        shell: bash
+        run: |
+          ./example/example_joular_core 3
+          ./example/c/example_c 3
+
+      - name: Check the version in the code matches the crate
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          crate=$(grep -m1 '^version' alire.toml | cut -d'"' -f2)
+          code=$(grep -m1 'Version_Number' src/joular_core.adb | cut -d'"' -f2)
+          echo "alire.toml=$crate joular_core.adb=$code"
+          test "$crate" = "$code"
+
       - name: Check the PawnIO modules against the package carrying them (Linux)
         if: runner.os == 'Linux'
         # Checks the pinned SHA-256 of tools/pawnio/*.bin, then that src/joular_core-pawnio_modules.ads is still what those modules produce, so a module and the package carrying it cannot drift apart unnoticed

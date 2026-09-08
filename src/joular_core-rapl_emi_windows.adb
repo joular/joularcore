@@ -102,6 +102,7 @@ package body Joular_Core.RAPL_EMI_Windows is
     EMI_UNIT_PICOWATT_HOURS : constant Unsigned_32 := 0;
 
     -- Where the description of a meter carries how many channels it has, and where those channels start, both counted from its beginning
+    -- Offsets into EMI_METADATA_V2 of emi.h in the Windows driver kit
     CHANNEL_COUNT_OFFSET : constant := 66;
     METADATA_HEADER_SIZE : constant := 68;
 
@@ -676,10 +677,9 @@ package body Joular_Core.RAPL_EMI_Windows is
             return 0;
         end if;
 
-        -- One picowatt hour is 3.6 nanojoules, which is 9/2500 of a microjoule
-        -- Above this the multiplication below would not fit in the type the library reports in
-        -- It stands for some nine thousand million million joules, which is a few hundred years of a machine drawing a kilowatt, so it is a guard and not a limit
-        if Raw = 0 or else Raw > 2_500_000_000_000_000_000 then
+        -- One picowatt hour is 3.6 nanojoules, which is exactly 9/2500 of a microjoule
+        -- The whole range of the counter converts without overflowing: the largest it can hold works out to about 66 thousand million joules, which is some hundred times less than what the type reporting it holds, so there is nothing here to guard against
+        if Raw = 0 then
             return 0;
         end if;
 

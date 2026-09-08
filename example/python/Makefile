@@ -16,11 +16,19 @@ RUN_ENV =
 # Windows sets OS=Windows_NT, Linux and the others leave it unset
 ifeq ($(OS),Windows_NT)
 
+    # Run the commands below in cmd (so behavior doesn't change whether ran from cmd or PowerShell), and no Unix tools (bash, cp, rm) are needed
+    SHELL = cmd.exe
+    .SHELLFLAGS = /c
+
     PJ_OS = windows
     PYTHON = python
 
     # Windows has no way to record where the library is, but looks for it next to the program, so put a copy there
-    COPY_LIBRARY = cp $(LIB_DIR)/*.dll .
+    # The commands of cmd only accept backslashes in paths, hence the slashes of LIB_DIR turned around
+    COPY_LIBRARY = copy /Y $(subst /,\,$(LIB_DIR))\*.dll .
+
+    CLEAN_LIBRARY = del /Q *.dll 2>nul & exit 0
+    CLEAN_CACHE = if exist __pycache__ rmdir /S /Q __pycache__
 
 else
 
@@ -49,7 +57,7 @@ run: all
 	$(RUN_ENV) $(PYTHON) main.py
 
 clean:
-	rm -f *.dll
-	rm -rf __pycache__
+	$(CLEAN_LIBRARY)
+	$(CLEAN_CACHE)
 
 .PHONY: all library run clean

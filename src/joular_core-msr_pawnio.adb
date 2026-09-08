@@ -188,7 +188,8 @@ package body Joular_Core.MSR_PawnIO is
         Bytes_Returned : aliased DWORD := 0; -- How much the driver actually wrote
         Result : BOOL := 0;
         Thread : HANDLE;
-        Previous_Affinity : DWORD_PTR := 0;
+        Previous_Affinity : DWORD_PTR := 0; -- The processors the thread was allowed on before being pinned
+        Restored : DWORD_PTR := 0; -- What putting it back answered, which is zero when it could not be put back
     begin
         Value := 0;
 
@@ -201,6 +202,11 @@ package body Joular_Core.MSR_PawnIO is
         -- The mask is read against the processor group the thread is in, so bit 0 is the first processor of that group: that is the first socket on a machine of up to 64 logical processors, which has only one group
         Thread := GetCurrentThread;
         Previous_Affinity := SetThreadAffinityMask (Thread, 1);
+
+        -- Zero means the thread could not be pinned, so the register is not read at all
+        if Previous_Affinity = 0 then
+            return False;
+        end if;
 
         -- Kept in its own block, so the thread is put back below whatever happens here rather than being left pinned to the first processor for the rest of the program
         begin
@@ -219,9 +225,13 @@ package body Joular_Core.MSR_PawnIO is
                 Result := 0;
         end;
 
-        -- Put the thread back where it was, if it was restricted at all
-        if Previous_Affinity /= 0 then
-            Previous_Affinity := SetThreadAffinityMask (Thread, Previous_Affinity);
+        -- Put the thread back where it was, whether the reading went through or not
+        -- A thread left pinned to the first processor would follow the program for the rest of its run, which is the caller's scheduling and not the library's to keep
+        Restored := SetThreadAffinityMask (Thread, Previous_Affinity);
+
+        -- The thread could not be put back, so the reading is turned down even when it went through: keeping it would mean handing back a value and leaving the program restricted to one processor behind it
+        if Restored = 0 then
+            return False;
         end if;
 
         -- The driver reports the whole output size when the call went through
