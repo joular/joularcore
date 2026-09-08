@@ -177,7 +177,8 @@ package body Joular_Core.Powermetrics is
         end if;
 
         -- The CPU and the GPU are read one after the other out of the same process
-        if Clock - Last_Drain < Reuse_Within then
+        -- Time_First is not a moment to count from, as subtracting it overflows, so it is looked for rather than subtracted, and the first drain simply goes ahead
+        if Last_Drain /= Time_First and then Clock - Last_Drain < Reuse_Within then
             return;
         end if;
 
