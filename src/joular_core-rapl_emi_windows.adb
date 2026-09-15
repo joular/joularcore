@@ -59,21 +59,8 @@ package body Joular_Core.RAPL_EMI_Windows is
 
     --------------------------------------------------
 
-    -- The device type the meters answer to, and how their requests carry their buffers and what they are allowed to do, all as they are written in emi.h
-    FILE_DEVICE_UNKNOWN : constant DWORD := 16#22#;
-    METHOD_BUFFERED : constant DWORD := 0;
+    -- What the requests of the meters are allowed to do, as emi.h writes it: the device type they answer to and how they carry their buffers are the shared ones
     FILE_READ_ACCESS : constant DWORD := 1;
-
-    -- CTL_CODE of the Windows driver kit, which builds the number naming one request of a driver
-    function Control_Code
-       (Device_Type : in DWORD;
-        Request : in DWORD;
-        Method : in DWORD;
-        Access_Mode : in DWORD) return DWORD
-    is (Shift_Left (Device_Type, 16)
-        or Shift_Left (Access_Mode, 14)
-        or Shift_Left (Request, 2)
-        or Method);
 
     -- Which version of the interface the meter answers
     IOCTL_EMI_GET_VERSION : constant DWORD :=

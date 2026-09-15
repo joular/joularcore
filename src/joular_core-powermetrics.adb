@@ -70,11 +70,9 @@ package body Joular_Core.Powermetrics is
     GPU_Watts : Long_Float := 0.0;
     Sample_Time : Time := Time_First;
 
-    -- The sample being read out of the output, which is kept apart until it is whole
+    -- The CPU line of the sample being read out of the output, which is kept apart until the GPU line of that same sample closes it
     Pending_CPU : Long_Float := 0.0;
-    Pending_GPU : Long_Float := 0.0;
     Pending_CPU_Seen : Boolean := False;
-    Pending_GPU_Seen : Boolean := False;
 
     -- When the output was last drained, so reading the two sources one after the other does not drain it twice
     Last_Drain : Time := Time_First;
@@ -114,9 +112,7 @@ package body Joular_Core.Powermetrics is
         Sample_Time := Time_First;
 
         Pending_CPU := 0.0;
-        Pending_GPU := 0.0;
         Pending_CPU_Seen := False;
-        Pending_GPU_Seen := False;
 
         Last_Drain := Time_First;
     end Stop;
@@ -136,25 +132,19 @@ package body Joular_Core.Powermetrics is
             Watts := Watts / 1000.0;
         end if;
 
+        -- The sample is whole once its GPU line closes the CPU line held from that same sample
+        -- Keeping the CPU line apart until here is what stops a reading from pairing the CPU of one sample with the GPU of the one before
+        -- A GPU line with no CPU line waiting for it belongs to a sample that was never read whole, so it is dropped
         if Source = "CPU" then
             -- A second CPU line before the GPU line of the sample means that sample was never finished, so it is dropped
             Pending_CPU := Watts;
             Pending_CPU_Seen := True;
-            Pending_GPU_Seen := False;
-        else
-            Pending_GPU := Watts;
-            Pending_GPU_Seen := True;
-        end if;
-
-        -- The sample is whole once both of its lines have been read
-        -- Keeping them apart until here is what stops a reading from pairing the CPU of one sample with the GPU of the one before
-        if Pending_CPU_Seen and then Pending_GPU_Seen then
+        elsif Pending_CPU_Seen then
             CPU_Watts := Pending_CPU;
-            GPU_Watts := Pending_GPU;
+            GPU_Watts := Watts;
             Sample_Time := Clock;
 
             Pending_CPU_Seen := False;
-            Pending_GPU_Seen := False;
         end if;
 
         return True;
@@ -177,8 +167,7 @@ package body Joular_Core.Powermetrics is
         end if;
 
         -- The CPU and the GPU are read one after the other out of the same process
-        -- Time_First is not a moment to count from, as subtracting it overflows, so it is looked for rather than subtracted, and the first drain simply goes ahead
-        if Last_Drain /= Time_First and then Clock - Last_Drain < Reuse_Within then
+        if Clock - Last_Drain < Reuse_Within then
             return;
         end if;
 
@@ -244,11 +233,16 @@ package body Joular_Core.Powermetrics is
 
         Running := True;
 
+        -- Count from one window back, so the first reading drains rather than reuses, and so no subtraction is ever made from Time_First, which would overflow
+        Last_Drain := Clock - Reuse_Within;
+
         -- Wait for a first whole sample, so the hardware sources are only reported as available when powermetrics actually answers for both of them
         Deadline := Clock + Milliseconds (First_Sample_Timeout);
 
         while Clock < Deadline loop
-            Expect (Process, Result, Power_Line, Matched, Timeout => First_Sample_Timeout);
+            -- Only what is left of the budget is waited for, so the loop as a whole stays inside First_Sample_Timeout rather than starting it over on every line
+            Expect (Process, Result, Power_Line, Matched,
+                    Timeout => Integer'Max (1, Integer (Float (To_Duration (Deadline - Clock)) * 1000.0)));
 
             exit when Result = Expect_Timeout or else Matched (0) = No_Match;
 

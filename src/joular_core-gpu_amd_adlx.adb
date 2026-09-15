@@ -258,16 +258,11 @@ package body Joular_Core.GPU_AMD_ADLX is
             return False;
         end if;
 
-        case Kind is
-            when Board =>
-                Method := Table.GPUTotalBoardPower;
-
-            when Chip =>
-                Method := Table.GPUPower;
-
-            when None =>
-                return False;
-        end case;
+        -- Nothing settled leaves no method to ask for, which the check below turns down like any other missing one
+        Method := (case Kind is
+                      when Board => Table.GPUTotalBoardPower,
+                      when Chip => Table.GPUPower,
+                      when None => null);
 
         if Method = null or else Method (Metrics, Value'Access) /= ADLX_OK then
             return False;

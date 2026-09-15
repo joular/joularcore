@@ -117,37 +117,6 @@ package body Joular_Core.OS_Utils is
             return "";
     end Get_Platform_CPU_Name;
 
-    --------------------------------------------------
-
-    function Has_Unsupported_Energy_Unit return Boolean is
-        EAX, EBX, ECX, EDX : Unsigned_32;
-        Family : Unsigned_32;
-        Model : Unsigned_32;
-    begin
-        CPU_ID (1, EAX, EBX, ECX, EDX);
-
-        -- The family and the model sit in the first register, and for family 6 the model carries four more bits from further up
-        Family := Shift_Right (EAX, 8) and 16#F#;
-        Model := Shift_Right (EAX, 4) and 16#F#;
-
-        -- Only family 6 carries the processors below, so nothing else needs the extended model
-        if Family /= 6 then
-            return False;
-        end if;
-
-        Model := Model + Shift_Left (Shift_Right (EAX, 16) and 16#F#, 4);
-
-        -- The Silvermont and Airmont generations of Atom, which count the energy of the register in microjoules rather than in fractions of a joule
-        -- 37H is Bay Trail, 4AH and 5AH and 5DH the ones built into phones and tablets, and 4CH is Cherry Trail
-        return Model = 16#37# or else Model = 16#4A# or else Model = 16#4C#
-               or else Model = 16#5A# or else Model = 16#5D#;
-    exception
-        when others =>
-            -- The processor could not be asked, so we trurn it down
-            -- Turning it down reports nothing, where carrying on could report a thousand times what the machine draws
-            return True;
-    end Has_Unsupported_Energy_Unit;
-
 #elsif PJ_WINDOWS then
 
     -- Windows on a processor that is not a 64 bits x86 one
@@ -156,13 +125,6 @@ package body Joular_Core.OS_Utils is
     begin
         return "";
     end Get_Platform_CPU_Name;
-
-    --------------------------------------------------
-
-    function Has_Unsupported_Energy_Unit return Boolean is
-    begin
-        return False;
-    end Has_Unsupported_Energy_Unit;
 
 #elsif PJ_LINUX then
 
@@ -197,14 +159,6 @@ package body Joular_Core.OS_Utils is
             return "";
     end Get_Platform_CPU_Name;
 
-    --------------------------------------------------
-
-    -- The RAPL registers are only ever read directly on Windows, and Linux works the unit of its counter out on its own, so there is nothing to turn down here
-    function Has_Unsupported_Energy_Unit return Boolean is
-    begin
-        return False;
-    end Has_Unsupported_Energy_Unit;
-
 #elsif PJ_MACOS then
 
     -- MacOS platform
@@ -231,14 +185,6 @@ package body Joular_Core.OS_Utils is
         return "";
     end Get_Platform_CPU_Name;
 
-    --------------------------------------------------
-
-    -- The RAPL registers are only ever read directly on Windows, and Linux works the unit of its counter out on its own, so there is nothing to turn down here
-    function Has_Unsupported_Energy_Unit return Boolean is
-    begin
-        return False;
-    end Has_Unsupported_Energy_Unit;
-
 #elsif PJ_BSD then
 
     -- BSD platforms
@@ -246,14 +192,6 @@ package body Joular_Core.OS_Utils is
     begin
         return "";
     end Get_Platform_CPU_Name;
-
-    --------------------------------------------------
-
-    -- The RAPL registers are only ever read directly on Windows, and Linux works the unit of its counter out on its own, so there is nothing to turn down here
-    function Has_Unsupported_Energy_Unit return Boolean is
-    begin
-        return False;
-    end Has_Unsupported_Energy_Unit;
 
 #else
 
@@ -263,7 +201,44 @@ package body Joular_Core.OS_Utils is
         return "";
     end Get_Platform_CPU_Name;
 
+#end if;
+
     --------------------------------------------------
+
+#if PJ_WINDOWS and then PJ_X86 then
+
+    -- Whether the energy register of this processor counts in a unit the library cannot work with
+    -- This asks about the processor rather than about the operating system, so it forks on where the registers are read directly rather than once per platform
+    function Has_Unsupported_Energy_Unit return Boolean is
+        EAX, EBX, ECX, EDX : Unsigned_32;
+        Family : Unsigned_32;
+        Model : Unsigned_32;
+    begin
+        CPU_ID (1, EAX, EBX, ECX, EDX);
+
+        -- The family and the model sit in the first register, and for family 6 the model carries four more bits from further up
+        Family := Shift_Right (EAX, 8) and 16#F#;
+        Model := Shift_Right (EAX, 4) and 16#F#;
+
+        -- Only family 6 carries the processors below, so nothing else needs the extended model
+        if Family /= 6 then
+            return False;
+        end if;
+
+        Model := Model + Shift_Left (Shift_Right (EAX, 16) and 16#F#, 4);
+
+        -- The Silvermont and Airmont generations of Atom, which count the energy of the register in microjoules rather than in fractions of a joule
+        -- 37H is Bay Trail, 4AH and 5AH and 5DH the ones built into phones and tablets, and 4CH is Cherry Trail
+        return Model = 16#37# or else Model = 16#4A# or else Model = 16#4C#
+               or else Model = 16#5A# or else Model = 16#5D#;
+    exception
+        when others =>
+            -- The processor could not be asked, so it is turned down
+            -- Turning it down reports nothing, where carrying on could report a thousand times what the machine draws
+            return True;
+    end Has_Unsupported_Energy_Unit;
+
+#else
 
     -- The RAPL registers are only ever read directly on Windows, and Linux works the unit of its counter out on its own, so there is nothing to turn down here
     function Has_Unsupported_Energy_Unit return Boolean is

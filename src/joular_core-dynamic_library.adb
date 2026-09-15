@@ -121,14 +121,8 @@ package body Joular_Core.Dynamic_Library is
     --------------------------------------------------
 
     -- A full path is what dlopen takes, and giving it one is what stops it from looking through the folders it would otherwise search
-    function Load_From_Path (Path : in String) return System.Address is
-        C_Path : aliased char_array := To_C (Path);
-    begin
-        return dlopen (C_Path'Address, RTLD_NOW);
-    exception
-        when others =>
-            return System.Null_Address;
-    end Load_From_Path;
+    -- Handing dlopen a full path is all Load already does here, unlike on Windows where the two need different flags
+    function Load_From_Path (Path : in String) return System.Address is (Load (Path));
 
     --------------------------------------------------
 

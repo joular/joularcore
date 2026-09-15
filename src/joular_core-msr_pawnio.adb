@@ -30,20 +30,8 @@ package body Joular_Core.MSR_PawnIO is
     -- The device type PawnIO answers to
     PAWNIO_DEVICE_TYPE : constant DWORD := 41394; -- 16#A1B2#
 
-    -- How the request carries its buffers, and what it is allowed to do, both of which PawnIO leaves at zero
-    METHOD_BUFFERED : constant DWORD := 0;
+    -- What the request is allowed to do, which PawnIO leaves at zero, as it does METHOD_BUFFERED
     FILE_ANY_ACCESS : constant DWORD := 0;
-
-    -- CTL_CODE of the Windows driver kit, which builds the number naming one request of a driver
-    function Control_Code
-       (Device_Type : in DWORD;
-        Request : in DWORD;
-        Method : in DWORD;
-        Access_Mode : in DWORD) return DWORD
-    is (Shift_Left (Device_Type, 16)
-        or Shift_Left (Access_Mode, 14)
-        or Shift_Left (Request, 2)
-        or Method);
 
     -- Give the driver a module, which it checks and runs
     IOCTL_PIO_LOAD_BINARY : constant DWORD :=
@@ -189,7 +177,6 @@ package body Joular_Core.MSR_PawnIO is
         Result : BOOL := 0;
         Thread : HANDLE;
         Previous_Affinity : DWORD_PTR := 0; -- The processors the thread was allowed on before being pinned
-        Restored : DWORD_PTR := 0; -- What putting it back answered, which is zero when it could not be put back
     begin
         Value := 0;
 
@@ -227,10 +214,9 @@ package body Joular_Core.MSR_PawnIO is
 
         -- Put the thread back where it was, whether the reading went through or not
         -- A thread left pinned to the first processor would follow the program for the rest of its run, which is the caller's scheduling and not the library's to keep
-        Restored := SetThreadAffinityMask (Thread, Previous_Affinity);
-
         -- The thread could not be put back, so the reading is turned down even when it went through: keeping it would mean handing back a value and leaving the program restricted to one processor behind it
-        if Restored = 0 then
+        -- Zero is what SetThreadAffinityMask answers when it could not put the thread back
+        if SetThreadAffinityMask (Thread, Previous_Affinity) = 0 then
             return False;
         end if;
 

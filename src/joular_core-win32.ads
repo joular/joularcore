@@ -20,6 +20,7 @@ private package Joular_Core.Win32 is
     -- Win32 types and flags
     subtype HANDLE is System.Address; -- Win32 kernel object handle
     subtype DWORD is Interfaces.Unsigned_32; -- Win32 32 bits unsigned
+    use type Interfaces.Unsigned_32; -- The bit operations building the control codes below work on this type
     subtype BOOL is Interfaces.C.int; -- Win32 boolean, where zero is false
 
     -- Win32 unsigned that is as wide as a pointer: 64 bits on x64, 32 bits on x86
@@ -34,6 +35,21 @@ private package Joular_Core.Win32 is
     FILE_SHARE_READ : constant DWORD := 16#0000_0001#;
     FILE_SHARE_WRITE : constant DWORD := 16#0000_0002#;
     OPEN_EXISTING : constant DWORD := 3;
+
+    -- The device type a driver answers to when it is not one of the classes Windows names, and how a request carries its buffers, both as the Windows driver kit writes them
+    FILE_DEVICE_UNKNOWN : constant DWORD := 16#22#;
+    METHOD_BUFFERED : constant DWORD := 0;
+
+    -- CTL_CODE of the Windows driver kit, which builds the number naming one request of a driver
+    function Control_Code
+       (Device_Type : in DWORD;
+        Request : in DWORD;
+        Method : in DWORD;
+        Access_Mode : in DWORD) return DWORD
+    is (Interfaces.Shift_Left (Device_Type, 16)
+        or Interfaces.Shift_Left (Access_Mode, 14)
+        or Interfaces.Shift_Left (Request, 2)
+        or Method);
 
 #if PJ_WINDOWS then
 

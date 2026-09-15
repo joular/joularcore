@@ -51,14 +51,11 @@ else
 
 endif
 
-all: library copy-library $(EXE)
+all: library $(EXE)
 
 # Build the shared library of Joular Core, which is the one holding the C interface
 library:
 	gprbuild -P $(ROOT)/joularcore.gpr -XPJ_OS=$(PJ_OS) -XJOULARCORE_LIBRARY_TYPE=relocatable -p
-
-# Put the built library next to the program, on the systems that need it there
-copy-library: library
 	$(COPY_LIBRARY)
 
 $(EXE): main.c $(ROOT)/include/joularcore.h
@@ -73,4 +70,4 @@ clean:
 # Build the library before the example, even when asked to run several jobs at once
 .NOTPARALLEL:
 
-.PHONY: all library copy-library run clean
+.PHONY: all library run clean

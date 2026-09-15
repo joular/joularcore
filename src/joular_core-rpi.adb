@@ -292,7 +292,7 @@ package body Joular_Core.RPI is
             return 0.0;
         end if;
 
-        Usage := Long_Float'Max (0.0, Long_Float'Min (1.0, Usage));
+        Usage := Long_Float'Min (1.0, Usage);
 
         -- Calculate the power consumption, by using the formula and calculating every degree in the polynomial model
         for Degree in Power_Model'Range loop

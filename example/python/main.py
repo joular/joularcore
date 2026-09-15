@@ -148,7 +148,7 @@ def wanted_readings(argv):
     try:
         wanted = int(argv[1])
     except ValueError:
-        sys.exit("usage: main.py [number of readings]")
+        wanted = -1
 
     if wanted < 0:
         sys.exit("usage: main.py [number of readings]")

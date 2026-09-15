@@ -30,11 +30,8 @@ package body Joular_Core is
     procedure Open (Sources : in Source_List := All_Sources) is
     begin
         -- Close existing CPU and GPU sources if opened before and not closed for any reason
-        CPU_Monitor.Stop_Monitoring;
-        GPU_Monitor.Stop_Monitoring;
-        
-        -- Start with no hardware component accessible
-        Sources_List_Accessible := (others => False);
+        -- So we start with no hardware component already set to accessible
+        Close;
 
         -- Check and initialize CPU measurement
         if Sources (CPU) then
@@ -53,12 +50,8 @@ package body Joular_Core is
         Opened := True;
     exception
         when others =>
-            -- If anything failed halfway, stop the monitors so any driver or library already opened is closed
-            -- Both procedures do nothing when their monitor was not started
-            CPU_Monitor.Stop_Monitoring;
-            GPU_Monitor.Stop_Monitoring;
-            Sources_List_Accessible := (others => False);
-            Opened := False;
+            -- If anything failed halfway, close so any driver or library already opened is closed
+            Close;
     end Open;
 
     --------------------------------------------------
