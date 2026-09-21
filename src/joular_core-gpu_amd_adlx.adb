@@ -199,6 +199,13 @@ package body Joular_Core.GPU_AMD_ADLX is
     -- The card being read
     Card : aliased System.Address := System.Null_Address;
 
+    -- Which of the two powers the card is asked for
+    -- The whole board is what the card really draws; the processor of the card alone is a different quantity, and a smaller one
+    type Metric_Kind is (None, Board, Chip);
+
+    -- The one settled when the card was opened, and the only one asked for afterwards
+    Metric : Metric_Kind := None;
+
     --------------------------------------------------
 
     -- Get the method table of an object
@@ -234,16 +241,50 @@ package body Joular_Core.GPU_AMD_ADLX is
 
     --------------------------------------------------
 
-    -- Read the power of the card, in watts
-    -- Returns False when the card doesn't report a power value
-    function Read_Card_Power (Power : out Long_Float) return Boolean is
-        Metrics : aliased System.Address := System.Null_Address;
+    -- Read one named power out of a sample of the measures of the card, in watts
+    -- Returns False when the card does not offer that one, or would not answer for it
+    function Read_Metric
+       (Table : in GPU_Metrics_Vtbl_Access;
+        Metrics : in System.Address;
+        Kind : in Metric_Kind;
+        Power : out Long_Float) return Boolean
+    is
         Value : aliased double := 0.0;
-        Services : Perf_Services_Vtbl_Access;
-        Table : GPU_Metrics_Vtbl_Access;
-        Found : Boolean := False;
+        Method : Metric_Method;
     begin
         Power := 0.0;
+
+        if Table = null then
+            return False;
+        end if;
+
+        -- Nothing settled leaves no method to ask for, which the check below turns down like any other missing one
+        Method := (case Kind is
+                      when Board => Table.GPUTotalBoardPower,
+                      when Chip => Table.GPUPower,
+                      when None => null);
+
+        if Method = null or else Method (Metrics, Value'Access) /= ADLX_OK then
+            return False;
+        end if;
+
+        -- ADLX already reports power in watts
+        Power := Long_Float (Value);
+
+        return True;
+    end Read_Metric;
+
+    --------------------------------------------------
+
+    -- Settle which of the two powers this card is asked for, once, while it is being opened
+    -- The whole board is asked for first, as that is what the card really draws (similar to what NVML reports for Nvidia cards), and the processor of the card alone is the fallback for a card not offering it
+    function Choose_Metric return Boolean is
+        Metrics : aliased System.Address := System.Null_Address;
+        Services : Perf_Services_Vtbl_Access;
+        Table : GPU_Metrics_Vtbl_Access;
+        Power : Long_Float;
+    begin
+        Metric := None;
 
         Services := To_Perf_Services_Vtbl (Vtbl_Of (Perf_Services));
 
@@ -251,39 +292,68 @@ package body Joular_Core.GPU_AMD_ADLX is
             return False;
         end if;
 
-        -- Take one sample of the measures of the card
-        if Services.GetCurrentGPUMetrics (Perf_Services, Card, Metrics'Access) /= ADLX_OK then
+        begin
+            if Services.GetCurrentGPUMetrics (Perf_Services, Card, Metrics'Access) = ADLX_OK then
+                Table := To_GPU_Metrics_Vtbl (Vtbl_Of (Metrics));
+
+                if Read_Metric (Table, Metrics, Board, Power) then
+                    Metric := Board;
+                elsif Read_Metric (Table, Metrics, Chip, Power) then
+                    Metric := Chip;
+                end if;
+            end if;
+        exception
+            when others =>
+                Metric := None;
+        end;
+
+        Release_Object (Metrics);
+
+        return Metric /= None;
+    end Choose_Metric;
+
+    --------------------------------------------------
+
+    -- Read the power of the card, in watts
+    -- Returns False when the card doesn't report a power value
+    -- Only the one settled when the card was opened is asked for: a failure is a reading that did not happen
+    function Read_Card_Power (Power : out Long_Float) return Boolean is
+        Metrics : aliased System.Address := System.Null_Address;
+        Services : Perf_Services_Vtbl_Access;
+        Found : Boolean := False;
+    begin
+        Power := 0.0;
+
+        -- Nothing was settled, so the card was never opened
+        if Metric = None then
             return False;
         end if;
 
-        Table := To_GPU_Metrics_Vtbl (Vtbl_Of (Metrics));
+        Services := To_Perf_Services_Vtbl (Vtbl_Of (Perf_Services));
 
-        if Table /= null then
-            -- The whole board is asked for first, as that is what the card really draws (and similar to what NVML reports for Nvidia cards)
-            -- The power of the processor of the card alone is the fallback for a card not offering the first
-            -- ADLX already reports power in watts
-            if Table.GPUTotalBoardPower /= null
-               and then Table.GPUTotalBoardPower (Metrics, Value'Access) = ADLX_OK
-            then
-                Power := Long_Float (Value);
-                Found := True;
-            elsif Table.GPUPower /= null
-               and then Table.GPUPower (Metrics, Value'Access) = ADLX_OK
-            then
-                Power := Long_Float (Value);
-                Found := True;
-            end if;
+        if Services = null or else Services.GetCurrentGPUMetrics = null then
+            return False;
         end if;
+
+        -- Taking the sample and reading it are kept in a block of their own, so the sample is given back below whatever happens in here
+        begin
+            if Services.GetCurrentGPUMetrics (Perf_Services, Card, Metrics'Access) = ADLX_OK then
+                Found := Read_Metric (To_GPU_Metrics_Vtbl (Vtbl_Of (Metrics)), Metrics, Metric, Power);
+            end if;
+        exception
+            when others =>
+                Found := False;
+        end;
 
         -- The object is ours, so it has to be given back on every reading
         -- Otherwise ADLX is left holding one per reading and refuses to stop cleanly
         Release_Object (Metrics);
 
-        return Found;
-    exception
-        when others =>
+        if not Found then
             Power := 0.0;
-            return False;
+        end if;
+
+        return Found;
     end Read_Card_Power;
 
     --------------------------------------------------
@@ -296,7 +366,6 @@ package body Joular_Core.GPU_AMD_ADLX is
         ADLX_System : aliased System.Address := System.Null_Address;
         System_Table : System_Vtbl_Access;
         List_Table : GPU_List_Vtbl_Access;
-        Power : Long_Float;
     begin
         -- Start from nothing, so that detecting twice doesn't load the library a second time
         Close;
@@ -370,9 +439,9 @@ package body Joular_Core.GPU_AMD_ADLX is
             return False;
         end if;
 
-        -- Then, take a first reading
-        -- If reading fails, then we can't use this card
-        if not Read_Card_Power (Power) then
+        -- Then, settle which power this card is asked for, which is also the first reading
+        -- If it reports neither, then we can't use this card
+        if not Choose_Metric then
             Close;
             return False;
         end if;
@@ -402,6 +471,9 @@ package body Joular_Core.GPU_AMD_ADLX is
     procedure Close is
         Ignored : ADLX_RESULT;
     begin
+        -- Nothing is asked for any more, so the power settled for this card is forgotten with it
+        Metric := None;
+
         -- Release the card and the ADLX objects
         Release_Object (Card);
         Release_Object (GPU_List);
@@ -409,7 +481,13 @@ package body Joular_Core.GPU_AMD_ADLX is
 
         -- Stop ADLX
         if ADLX_Terminate /= null then
-            Ignored := ADLX_Terminate.all;
+            begin
+                Ignored := ADLX_Terminate.all;
+            exception
+                when others =>
+                    null;
+            end;
+
             ADLX_Terminate := null;
         end if;
 
@@ -418,10 +496,6 @@ package body Joular_Core.GPU_AMD_ADLX is
             Unload (ADLX_Library);
             ADLX_Library := System.Null_Address;
         end if;
-    exception
-        when others =>
-            ADLX_Terminate := null;
-            ADLX_Library := System.Null_Address;
     end Close;
 
 #else

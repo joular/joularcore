@@ -19,6 +19,10 @@ package body Joular_Core.Dynamic_Library is
     -- A plain LoadLibraryA would look in the program's own folder first, where a malicious library with the same name could have been planted
     LOAD_LIBRARY_SEARCH_SYSTEM32 : constant unsigned := 16#800#;
 
+    -- For a library given by its full path: look in the folder, and in the folders the system trusts
+    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR : constant unsigned := 16#100#;
+    LOAD_LIBRARY_SEARCH_DEFAULT_DIRS : constant unsigned := 16#1000#;
+
     -- Windows specific functions to load libraries
     function LoadLibraryExA
        (lpLibFileName : System.Address;
@@ -42,6 +46,20 @@ package body Joular_Core.Dynamic_Library is
         when others =>
             return System.Null_Address;
     end Load;
+
+    --------------------------------------------------
+
+    function Load_From_Path (Path : in String) return System.Address is
+        C_Path : aliased char_array := To_C (Path);
+    begin
+        return LoadLibraryExA
+           (C_Path'Address,
+            System.Null_Address,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    exception
+        when others =>
+            return System.Null_Address;
+    end Load_From_Path;
 
     --------------------------------------------------
 
@@ -99,6 +117,12 @@ package body Joular_Core.Dynamic_Library is
         when others =>
             return System.Null_Address;
     end Load;
+
+    --------------------------------------------------
+
+    -- A full path is what dlopen takes, and giving it one is what stops it from looking through the folders it would otherwise search
+    -- Handing dlopen a full path is all Load already does here, unlike on Windows where the two need different flags
+    function Load_From_Path (Path : in String) return System.Address is (Load (Path));
 
     --------------------------------------------------
 

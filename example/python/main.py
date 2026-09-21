@@ -20,6 +20,10 @@ Then run this program:
 
     python3 example/python/main.py
 
+It takes an optional number of readings to take before stopping on its own:
+
+    python3 example/python/main.py 10
+
 Nothing has to be compiled here: ctypes calls the shared library directly.
 The C declarations these classes mirror are in include/joularcore.h.
 """
@@ -135,9 +139,28 @@ def measurement_text(name, measurement):
     return "{} {:.2f} {}".format(name, measurement.value, unit)
 
 
+def wanted_readings(argv):
+    """How many readings to take before stopping, or zero to run until Ctrl+C.
+    """
+    if len(argv) <= 1:
+        return 0
+
+    try:
+        wanted = int(argv[1])
+    except ValueError:
+        wanted = -1
+
+    if wanted < 0:
+        sys.exit("usage: main.py [number of readings]")
+
+    return wanted
+
+
 def main():
     library = load_library()
     reading = Reading()
+    wanted = wanted_readings(sys.argv)
+    taken = 0
 
     # The Ada runtime inside the shared library installs its own Ctrl+C handler while it starts up, which takes the place of the one Python installed before it
     # Putting Python's back here, after the library is loaded, is what makes Ctrl+C raise KeyboardInterrupt and stop the loop below
@@ -159,6 +182,11 @@ def main():
             print(measurement_text("CPU", reading.cpu),
                   measurement_text("GPU", reading.gpu),
                   sep=" | ", flush=True)
+
+            # Only when a count was asked for, as zero means running until Ctrl+C
+            taken += 1
+            if wanted and taken >= wanted:
+                break
     except KeyboardInterrupt:
         # Ctrl+C interrupts the sleep above, so the loop stops here instead of being killed on the spot, and the sources are closed below
         print("\nStopping")

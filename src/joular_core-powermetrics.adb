@@ -10,6 +10,8 @@
 --
 
 #if PJ_MACOS then
+with Ada.Real_Time; use Ada.Real_Time;
+
 with Interfaces.C; use Interfaces.C;
 
 with GNAT.Expect; use GNAT.Expect;
@@ -45,6 +47,13 @@ package body Joular_Core.Powermetrics is
     Power_Line : constant Pattern_Matcher :=
         Compile ("^ *(CPU|GPU) Power: +([0-9.]+) +(m?W)", Multiple_Lines);
 
+    -- How long a sample stays useful
+    -- powermetrics writes one every interval, so if after some time there is no new readings, it means powermetrics stopped responding or another issue
+    Stale_After : constant Time_Span := Milliseconds (3_500);
+
+    -- Time between two readings that justifies using the old one
+    Reuse_Within : constant Time_Span := Milliseconds (100);
+
     -- The powermetrics process being read
     Process : Process_Descriptor;
 
@@ -52,11 +61,21 @@ package body Joular_Core.Powermetrics is
     Running : Boolean := False;
 
     -- Number of hardware sources using the process (the CPU and the GPU share the one process)
+    -- It counts holders and not processes: Stop leaves it alone on purpose, so a process that died still needs one Close from each holder before a new one is started
     Users : Natural := 0;
 
-    -- Power of the last sample, in watts
+    -- Power of the last whole sample, in watts, and the moment it was put together
+    -- The two are only written together, so a reading never pairs the CPU of one sample with the GPU of another
     CPU_Watts : Long_Float := 0.0;
     GPU_Watts : Long_Float := 0.0;
+    Sample_Time : Time := Time_First;
+
+    -- The CPU line of the sample being read out of the output, which is kept apart until the GPU line of that same sample closes it
+    Pending_CPU : Long_Float := 0.0;
+    Pending_CPU_Seen : Boolean := False;
+
+    -- When the output was last drained, so reading the two sources one after the other does not drain it twice
+    Last_Drain : Time := Time_First;
 
     --------------------------------------------------
 
@@ -87,15 +106,23 @@ package body Joular_Core.Powermetrics is
         end if;
 
         Running := False;
+
         CPU_Watts := 0.0;
         GPU_Watts := 0.0;
+        Sample_Time := Time_First;
+
+        Pending_CPU := 0.0;
+        Pending_CPU_Seen := False;
+
+        Last_Drain := Time_First;
     end Stop;
 
     --------------------------------------------------
 
     -- Keep the value of one power line just matched in the output of powermetrics
     -- The three parenthesized parts of the line are the hardware source, the value, and its unit
-    procedure Store (Output : in String; Matched : in Match_Array) is
+    -- Returns False when the line carried something that is not a number
+    function Store (Output : in String; Matched : in Match_Array) return Boolean is
         Source : constant String := Output (Matched (1).First .. Matched (1).Last);
         Unit : constant String := Output (Matched (3).First .. Matched (3).Last);
         Watts : Long_Float := Long_Float'Value (Output (Matched (2).First .. Matched (2).Last));
@@ -105,40 +132,69 @@ package body Joular_Core.Powermetrics is
             Watts := Watts / 1000.0;
         end if;
 
+        -- The sample is whole once its GPU line closes the CPU line held from that same sample
+        -- Keeping the CPU line apart until here is what stops a reading from pairing the CPU of one sample with the GPU of the one before
+        -- A GPU line with no CPU line waiting for it belongs to a sample that was never read whole, so it is dropped
         if Source = "CPU" then
-            CPU_Watts := Watts;
-        else
+            -- A second CPU line before the GPU line of the sample means that sample was never finished, so it is dropped
+            Pending_CPU := Watts;
+            Pending_CPU_Seen := True;
+        elsif Pending_CPU_Seen then
+            CPU_Watts := Pending_CPU;
             GPU_Watts := Watts;
+            Sample_Time := Clock;
+
+            Pending_CPU_Seen := False;
         end if;
+
+        return True;
     exception
         when others =>
-            null;
+            return False;
     end Store;
 
     --------------------------------------------------
 
-    -- Read every sample powermetrics wrote since the last call, and keep the values of the last one
-    -- Nothing new to read simply keeps the values of the previous sample
+    -- Read every sample powermetrics wrote since the last call, and keep the values of the last whole one
+    -- Nothing new to read simply keeps the values of the previous sample, until it is old enough to be worth nothing
     procedure Update is
         Result : Expect_Match;
         Matched : Match_Array (0 .. 3);
+        Ignored : Boolean;
     begin
         if not Running then
             return;
         end if;
+
+        -- The CPU and the GPU are read one after the other out of the same process
+        if Clock - Last_Drain < Reuse_Within then
+            return;
+        end if;
+
+        Last_Drain := Clock;
 
         loop
             Expect (Process, Result, Power_Line, Matched, Timeout => Drain_Timeout);
 
             exit when Result = Expect_Timeout or else Matched (0) = No_Match;
 
-            Store (Expect_Out (Process), Matched);
+            Ignored := Store (Expect_Out (Process), Matched);
         end loop;
     exception
         when others =>
             -- The process died or its output could not be read, so the sources it fed report zero from now on
             Stop;
     end Update;
+
+    --------------------------------------------------
+
+    -- Whether the last whole sample is recent enough to still be useful
+    function Sample_Is_Fresh return Boolean is
+    begin
+        return Running
+               and then Sample_Time /= Time_First
+               and then Clock - Sample_Time <= Stale_After;
+    end Sample_Is_Fresh;
 
     --------------------------------------------------
 
@@ -155,6 +211,7 @@ package body Joular_Core.Powermetrics is
 
         Result : Expect_Match;
         Matched : Match_Array (0 .. 3);
+        Deadline : Time;
 
         -- Give the memory of the argument list back once it has been spawned
         -- Freeing a String sets it to null, and freeing null does nothing, so calling this twice is harmless
@@ -176,17 +233,33 @@ package body Joular_Core.Powermetrics is
 
         Running := True;
 
-        -- Wait for the first sample, so the hardware sources are only reported as available when powermetrics actually answers
-        Expect (Process, Result, Power_Line, Matched, Timeout => First_Sample_Timeout);
+        -- Count from one window back, so the first reading drains rather than reuses, and so no subtraction is ever made from Time_First, which would overflow
+        Last_Drain := Clock - Reuse_Within;
 
-        if Result = Expect_Timeout or else Matched (0) = No_Match then
-            Stop;
-            return False;
-        end if;
+        -- Wait for a first whole sample, so the hardware sources are only reported as available when powermetrics actually answers for both of them
+        Deadline := Clock + Milliseconds (First_Sample_Timeout);
 
-        Store (Expect_Out (Process), Matched);
+        while Clock < Deadline loop
+            -- Only what is left of the budget is waited for, so the loop as a whole stays inside First_Sample_Timeout rather than starting it over on every line
+            Expect (Process, Result, Power_Line, Matched,
+                    Timeout => Integer'Max (1, Integer (Float (To_Duration (Deadline - Clock)) * 1000.0)));
 
-        return True;
+            exit when Result = Expect_Timeout or else Matched (0) = No_Match;
+
+            -- A line that is not a number is not useful to keep
+            if not Store (Expect_Out (Process), Matched) then
+                Stop;
+                return False;
+            end if;
+
+            -- Store only writes these together, and only for a sample it read whole
+            if Sample_Time /= Time_First then
+                return True;
+            end if;
+        end loop;
+
+        Stop;
+        return False;
     exception
         when others =>
             Free_Arguments;
@@ -230,6 +303,12 @@ package body Joular_Core.Powermetrics is
     function Get_CPU_Power return Long_Float is
     begin
         Update;
+
+        -- The sampler stopped answering, and if not a fresh sample, then return 0
+        if not Sample_Is_Fresh then
+            return 0.0;
+        end if;
+
         return CPU_Watts;
     end Get_CPU_Power;
 
@@ -238,6 +317,11 @@ package body Joular_Core.Powermetrics is
     function Get_GPU_Power return Long_Float is
     begin
         Update;
+
+        if not Sample_Is_Fresh then
+            return 0.0;
+        end if;
+
         return GPU_Watts;
     end Get_GPU_Power;
 

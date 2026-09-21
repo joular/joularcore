@@ -50,9 +50,14 @@ package body Joular_Core.RAPL_Powercap is
                     Energy_File := To_Unbounded_String (Domain & "/energy_uj");
                     Max_Range_File := To_Unbounded_String (Domain & "/max_energy_range_uj");
 
-                    -- Take first reading and check it is not zero
-                    -- Reading the energy file needs root on most Linux systems
-                    return Read_Value (To_String (Energy_File)) /= 0;
+                    -- Take first reading and check it is not zero, as reading the energy file needs root on most Linux systems
+                    -- If the max range file can't be read or reports 0 or a negative value, then the wrap point is unknown and a wrapped reading could only be dropped, so report false
+                    if Read_Counter = 0 or else Max_Energy_Range <= 0 then
+                        Close;
+                        return False;
+                    end if;
+
+                    return True;
                 end if;
             end;
         end loop;

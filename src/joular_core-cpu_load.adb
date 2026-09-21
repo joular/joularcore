@@ -16,6 +16,9 @@ with Joular_Core.File_Utils; use Joular_Core.File_Utils;
 
 package body Joular_Core.CPU_Load is
 
+    -- When there is no usage at all, we report a negative number
+    Not_Measured : constant Long_Float := -1.0;
+
 #if PJ_LINUX then
 
     -- CPU statistics files on Linux
@@ -87,24 +90,38 @@ package body Joular_Core.CPU_Load is
         Current_Times : constant CPU_Times := Read_Times;
         Elasped_Time : constant Long_Long_Integer := Current_Times.Total - Previous_Times.Total;
         Waiting_Time : Long_Long_Integer; -- Ticks of the interval the machine spend waiting
-        Result : Long_Float := 0.0;
     begin
-        -- Current time is zero (counter can't be read or other error), return 0
+        -- Current time is zero (counter can't be read or other error)
+        -- What is measured from is left where it is, so the next reading that works covers this gap as well
         if Current_Times.Total = 0 then
-            return 0.0;
+            return Not_Measured;
         end if;
 
-        -- Previous time is positive, and time has elapsed
-        if Previous_Times.Total > 0 and then Elasped_Time > 0 then
-            -- Waiting can't be longer than the elasped time (the interval it is part of)
-            -- Some kernel version let it go backward, so it might report more work done than actually done
-            Waiting_Time := Long_Long_Integer'Max (0, Long_Long_Integer'Min (Elasped_Time, Current_Times.Idle - Previous_Times.Idle));
-            Result := Long_Float (Elasped_Time - Waiting_Time) / Long_Float (Elasped_Time);
+        -- Nothing to measure from yet, so this reading becomes what the next one measures from
+        if Previous_Times.Total = 0 then
+            Previous_Times := Current_Times;
+            return Not_Measured;
         end if;
+
+        -- The counter went backwards, which is what a machine restarted under the program looks like, so measure from where it is now instead
+        if Elasped_Time < 0 then
+            Previous_Times := Current_Times;
+            return Not_Measured;
+        end if;
+
+        -- The kernel counts in ticks of its own, so reading twice inside one of them leaves an interval with nothing in it to measure
+        -- What is measured from is deliberately left where it is: moving it here would leave the next reading just as short, and answering zero would be handed to the power models as a machine sitting idle
+        if Elasped_Time = 0 then
+            return Not_Measured;
+        end if;
+
+        -- Waiting can't be longer than the elasped time (the interval it is part of)
+        -- Some kernel version let it go backward, so it might report more work done than actually done
+        Waiting_Time := Long_Long_Integer'Max (0, Long_Long_Integer'Min (Elasped_Time, Current_Times.Idle - Previous_Times.Idle));
 
         Previous_Times := Current_Times;
 
-        return Result;
+        return Long_Float (Elasped_Time - Waiting_Time) / Long_Float (Elasped_Time);
     end Usage;
 
 #else
@@ -118,9 +135,10 @@ package body Joular_Core.CPU_Load is
 
     --------------------------------------------------
 
+    -- There is no counter to read here, so there is never an interval to measure
     function Usage return Long_Float is
     begin
-        return 0.0;
+        return Not_Measured;
     end Usage;
 
 #end if;

@@ -56,10 +56,10 @@ all: library $(EXE)
 # Build the shared library of Joular Core, which is the one holding the C interface
 library:
 	gprbuild -P $(ROOT)/joularcore.gpr -XPJ_OS=$(PJ_OS) -XJOULARCORE_LIBRARY_TYPE=relocatable -p
+	$(COPY_LIBRARY)
 
 $(EXE): main.c $(ROOT)/include/joularcore.h
 	$(CC) $(CFLAGS) main.c $(LDFLAGS) -o $(EXE)
-	$(COPY_LIBRARY)
 
 run: all
 	$(RUN)

@@ -1,15 +1,29 @@
 library project Joularcore is
 
-    --  Windows sets OS=Windows_NT; Linux/macOS/BSD leave it unset
+    Host_Target := project'Target;
+
+    Default_OS := "linux";
+    case Host_Target is
+        when "aarch64-darwin" | "arm64-darwin" | "x86_64-darwin" | "i686-darwin"
+            => Default_OS := "macos";
+        when "x86_64-freebsd" | "aarch64-freebsd" | "amd64-freebsd"
+           | "x86_64-openbsd" | "x86_64-netbsd" | "x86_64-dragonfly"
+            => Default_OS := "bsd";
+        when "x86_64-windows64" | "x86_64-windows" | "aarch64-windows64" | "i686-windows"
+            => Default_OS := "windows";
+        when others
+            => Default_OS := "linux";
+    end case;
+
+    --  Windows also announces itself in the environment, which settles a target name the list above does not carry
     type Host_OS_Kind is ("Windows_NT", "other");
     Host_OS : Host_OS_Kind := external ("OS", "other");
 
-    Default_OS := "linux";
     case Host_OS is
         when "Windows_NT"
             => Default_OS := "windows";
         when "other"
-            => Default_OS := "linux";
+            => null;
     end case;
 
     -- Symbols to indicate which OS to compile for
@@ -33,6 +47,23 @@ library project Joularcore is
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
     end case;
+
+    -- Check if the processor a 64 bits x86 one, meaning the CPUID instruction can be run on, only useful for Windows when reading RAPL registers
+    -- Build with: gprbuild -XPJ_X86=False
+    Default_X86 := "False";
+    case Host_Target is
+        when "x86_64-windows64" | "x86_64-windows" | "x86_64-darwin"
+           | "x86_64-linux" | "x86_64-freebsd" | "amd64-freebsd"
+           | "x86_64-openbsd" | "x86_64-netbsd" | "x86_64-dragonfly"
+            => Default_X86 := "True";
+        when others
+            => Default_X86 := "False";
+    end case;
+
+    type X86_Kind is ("True", "False");
+    PJ_X86 : X86_Kind := external ("PJ_X86", Default_X86);
+
+    Defines := Defines & ("-gnateDPJ_X86=" & PJ_X86);
 
     -- Library type
     -- static : libJoular_Core.a, linked into the client
@@ -75,7 +106,7 @@ library project Joularcore is
     end case;
 
     package Compiler is
-        for Switches ("Ada") use ("-O3", "-gnat2012", "-gnatwa") & Defines;
+        for Switches ("Ada") use ("-O2", "-gnat2012", "-gnatwa") & Defines;
     end Compiler;
 
     package Binder is

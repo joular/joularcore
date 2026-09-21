@@ -16,6 +16,9 @@
  *   make
  *   ./example_c
  *
+ * It takes an optional number of readings to take before stopping on its own, which is what makes a run scriptable:
+ *   ./example_c 10
+ *
  * Or by hand, against the relocatable (shared) library, from the root of the repository:
  *   gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable
  *   gcc example/c/main.c -Iinclude -Llib/relocatable -lJoular_Core -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
@@ -23,8 +26,10 @@
  * -I is the folder holding joularcore.h, -L and -l the library to link with, and -rpath the folder where the program looks for the library when it runs
  */
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -57,9 +62,31 @@ static void print_measurement(const char *name, const joular_measurement *m)
         printf("%s n/a", name);
 }
 
-int main(void)
+/* How many readings to take before stopping, or zero to run until Ctrl+C
+ */
+static int wanted_readings(const char *text, long *wanted)
+{
+    char *end = NULL;
+
+    errno = 0;
+    *wanted = strtol(text, &end, 10);
+
+    if (end == text || *end != '\0' || errno == ERANGE || *wanted < 0)
+        return 0;
+
+    return 1;
+}
+
+int main(int argc, char **argv)
 {
     joular_reading reading;
+    long wanted = 0;
+    long taken = 0;
+
+    if (argc > 1 && !wanted_readings(argv[1], &wanted)) {
+        fprintf(stderr, "usage: %s [number of readings]\n", argv[0]);
+        return 1;
+    }
 
     printf("Joular Core %s\n", joular_version());
 
@@ -83,6 +110,11 @@ int main(void)
         printf(" | ");
         print_measurement("GPU", &reading.gpu);
         printf("\n");
+
+        /* Only when a count was asked for, as zero means running until Ctrl+C */
+        taken++;
+        if (wanted > 0 && taken >= wanted)
+            break;
     }
 
     /* Ctrl+C was pressed, so close the sources opened above */

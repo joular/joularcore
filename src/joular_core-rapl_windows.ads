@@ -9,13 +9,12 @@
 --  Author : Adel Noureddine
 --
 
--- This package is for RAPL for Windows (reading the MSR directly through a driver)
--- Reading a register needs a driver, and either of two is used: PawnIO first, and Hubblo's RAPL driver when PawnIO is not there or not supporting the processor
--- This package keeps the vendor detection and the counter abstract, and hands the reading of a single register to Joular_Core.MSR_PawnIO or Joular_Core.MSR_Hubblo
-private package Joular_Core.RAPL_MSR_Windows is
+-- This package is for RAPL for Windows, where the same counter can be reached in two ways:
+-- 1) through the Energy Meter Interface, which is the meter Windows itself publishes and requires no installation, or 2) by reading the MSR registers directly through a driver
+-- This package keeps which of the two answered, and hands the reading to Joular_Core.RAPL_EMI_Windows or Joular_Core.RAPL_MSR_Windows
+private package Joular_Core.RAPL_Windows is
 
-    -- Open the RAPL counter (driver or files)
-    -- Checks that PKG domain exists and can be read
+    -- Open the RAPL counter, trying each approach and keeping the first that answers
     function Open return Boolean;
 
     -- Get the max energy range of the RAPL counter
@@ -24,7 +23,7 @@ private package Joular_Core.RAPL_MSR_Windows is
     -- Get a reading from the RAPL counter, as is, in microjoules
     function Read_Counter return Long_Long_Integer;
 
-    -- Close driver on Windows, nothing on Linux
+    -- Close the approach used (driver or EMI)
     procedure Close;
 
-end Joular_Core.RAPL_MSR_Windows;
+end Joular_Core.RAPL_Windows;
