@@ -14,7 +14,7 @@
 package Joular_Core is
 
     -- The hardware sources to measure
-    -- CPUs: Intel and AMD (RAPL), Apple Silicon, Raspberry Pi and other boards
+    -- CPUs: Intel and AMD (RAPL), Apple Silicon and Mac Intel (powermetrics), Raspberry Pi and other boards
     -- GPUs: Nvidia, AMD, Apple Silicon
     -- Joular Core detects automatically the available sources and how to read them
     type Source is (CPU, GPU);

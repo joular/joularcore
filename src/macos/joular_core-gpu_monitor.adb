@@ -11,7 +11,7 @@
 
 with Joular_Core.Powermetrics;
 
--- macOS: the GPU built in the chip of Apple Silicon Macs, through powermetrics
+-- macOS: the GPU built in the chip of Apple Silicon Macs, through powermetrics (Mac Intel report none)
 package body Joular_Core.GPU_Monitor is
 
     function Open return Boolean is

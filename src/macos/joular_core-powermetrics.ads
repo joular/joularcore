@@ -9,12 +9,12 @@
 --  Author : Adel Noureddine
 --
 
--- Read the CPU and the GPU power of Apple Silicon Macs, from the powermetrics tool of macOS
+-- Read the CPU and the GPU power of Macs, from the powermetrics tool of macOS (Mac Intel: the CPU only)
 -- One powermetrics process serves both CPU and GPU: started by the first Open, killed by the last Close
 private package Joular_Core.Powermetrics is
 
     -- Start powermetrics if it is not started yet, and wait for its first sample
-    -- Returns False on Mac Intel, and when the program is not run as root
+    -- Returns False for the GPU on Mac Intel, and when the program is not run as root
     function Open (Item : in Source) return Boolean;
 
     -- Get the power of the source in the last sample, in watts

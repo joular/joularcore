@@ -15,7 +15,7 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 |---|---|---|---|---|
 | CPU | Intel, AMD | Linux | RAPL through powercap sysfs | Energy (joules) |
 | CPU | Intel, AMD | Windows | RAPL through the [Energy Meter Interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface) (nothing to install), or the RAPL MSR through [PawnIO](https://pawnio.eu) or [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
-| CPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
+| CPU | Apple Silicon, Intel Macs | macOS | powermetrics (installed with macOS) | Power (watts) |
 | CPU | Raspberry Pi | Linux | Regression power models | Power (watts) |
 | GPU | Nvidia cards | Linux, Windows, BSD | NVML (installed with the Nvidia driver) | Power (watts) |
 | GPU | AMD cards | Linux | amdgpu hwmon sysfs | Power (watts) |
@@ -23,8 +23,8 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 | GPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 
 For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board.
-On macOS, only Apple Silicon Macs are supported: their CPU and the GPU built in the same chip are both read from powermetrics, one reading each.
-Mac Intel are not supported. On BSD, only Nvidia GPUs are implemented for now (CPU support is planned).
+On macOS, Apple Silicon Macs give their CPU and the GPU built in the same chip, both read from powermetrics, one reading each.
+Intel Macs give the CPU only. On BSD, only Nvidia GPUs are implemented for now (CPU support is planned).
 
 ## Required privileges
 
@@ -196,7 +196,7 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 | Nvidia (NVML) | What the card reports for the whole GPU board. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
 | AMD on Linux (hwmon) | Whole GPU board power, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
 | AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is choosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
-| macOS | The CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them |
+| macOS | Apple Silicon: the CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them. Intel Macs: the whole chip (cores, integrated GPU and system agent), like the RAPL package on Linux and Windows |
 
 RAPL counters wrap when they fill, and the library corrects that. The correction only works if less energy was used between two readings than the counter holds. How long the counter takes to fill depends on the energy unit of the processor.
 The Energy Meter Interface (EMI) on Windows corrects for the wrap by itself, so Joular Core doesn't need to do the correction.

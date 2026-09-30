@@ -11,7 +11,7 @@
 
 with Joular_Core.Powermetrics;
 
--- macOS: Apple Silicon through powermetrics
+-- macOS: through powermetrics
 package body Joular_Core.CPU_Monitor is
 
     function Open return Boolean is

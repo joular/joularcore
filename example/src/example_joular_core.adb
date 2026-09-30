@@ -10,7 +10,7 @@
 --
 
 --  Prints the energy and power consumed by the CPU and the GPU every second, until stopped with Ctrl+C
---  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL through Windows' Energy Meter Interface or through the MSR registers), macOS (Apple Silicon through powermetrics), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
+--  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL through Windows' Energy Meter Interface or through the MSR registers), macOS (Apple Silicon and Intel Macs through powermetrics), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
 --
 --  On Windows the RAPL counter is reached in one of three ways, and naming one on the command line tries that one alone:
 --      example_joular_core emi
@@ -176,7 +176,6 @@ procedure Example_Joular_Core is
         end if;
 #elsif PJ_MACOS then
         Put_Line ("macOS reports the power of the chip through /usr/bin/powermetrics, which only answers a program running as root, so run this with sudo");
-        Put_Line ("Failing that, this is an Intel Mac: only Apple Silicon is supported");
 #elsif PJ_LINUX then
         Put_Line ("The RAPL counter in /sys/class/powercap/intel-rapl is only readable by root on most distributions, so run this with sudo");
         Put_Line ("Raspberry Pi and other supported boards have no counter, and are read from a model of the board named in /proc/device-tree/model");

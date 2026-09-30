@@ -42,6 +42,11 @@ package body Joular_Core.Powermetrics is
     Power_Line : constant Pattern_Matcher :=
         Compile ("^ *(CPU|GPU) Power: +([0-9.]+) +(m?W)", Multiple_Lines);
 
+    -- Mac Intel, e.g. "Intel energy model derived package power (CPUs+GT+SA): 2.48W": the whole chip, like the RAPL package domain
+    -- Same three groups as above, so one Store reads both
+    Intel_Power_Line : constant Pattern_Matcher :=
+        Compile ("^ *(Intel) energy model derived package power \(CPUs\+GT\+SA\): +([0-9.]+) *(m?W)", Multiple_Lines);
+
     -- No new sample for this long means powermetrics stopped
     Stale_After : constant Time_Span := Milliseconds (3_500);
 
@@ -67,7 +72,7 @@ package body Joular_Core.Powermetrics is
 
     --------------------------------------------------
 
-    -- Only Apple Silicon is supported: Mac Intel report their power in another form, and have no power model here
+    -- Apple Silicon report the CPU and the GPU each on a line; Mac Intel report the whole chip on one line, and no GPU
     function Is_Apple_Silicon return Boolean is
         function Sysctl_By_Name
            (Name : in char_array;
@@ -83,6 +88,11 @@ package body Joular_Core.Powermetrics is
         return Sysctl_By_Name (To_C ("hw.optional.arm64"), Is_ARM'Address, Length'Address, System.Null_Address, 0) = 0
                and then Is_ARM = 1;
     end Is_Apple_Silicon;
+
+    Apple_Silicon : constant Boolean := Is_Apple_Silicon;
+
+    -- The power line of this chip
+    Chip_Line : constant Pattern_Matcher := (if Apple_Silicon then Power_Line else Intel_Power_Line);
 
     --------------------------------------------------
 
@@ -135,7 +145,11 @@ package body Joular_Core.Powermetrics is
         end if;
 
         -- Publish only a CPU line followed by its GPU line, so both values come from one sample
-        if Name = "CPU" then
+        -- Mac Intel have no GPU line, so their one line is the sample
+        if Name = "Intel" then
+            Watts := (CPU => Value, GPU => 0.0);
+            Sample_Time := Clock;
+        elsif Name = "CPU" then
             Pending_CPU := Value;
             Pending_CPU_Seen := True;
         elsif Pending_CPU_Seen then
@@ -166,7 +180,7 @@ package body Joular_Core.Powermetrics is
     -- False when it cannot run or gives nothing in time
     function Start return Boolean is
         Arguments : GNAT.OS_Lib.Argument_List :=
-            (new String'("--samplers"), new String'("cpu_power,gpu_power"),
+            (new String'("--samplers"), new String'(if Apple_Silicon then "cpu_power,gpu_power" else "cpu_power"),
              new String'("-i"), new String'(Sample_Interval),
              -- Unbuffered, so a reading gets the sample of the moment
              new String'("-b"), new String'("0"),
@@ -203,7 +217,7 @@ package body Joular_Core.Powermetrics is
         Deadline := Clock + Milliseconds (First_Sample_Timeout);
 
         while Clock < Deadline loop
-            Expect (Process, Result, Power_Line, Matched,
+            Expect (Process, Result, Chip_Line, Matched,
                     Timeout => Integer'Max (1, Integer (Float (To_Duration (Deadline - Clock)) * 1000.0)));
 
             exit when Result = Expect_Timeout or else Matched (0) = No_Match;
@@ -255,7 +269,7 @@ package body Joular_Core.Powermetrics is
         Last_Drain := Clock;
 
         loop
-            Expect (Process, Result, Power_Line, Matched, Timeout => Drain_Timeout);
+            Expect (Process, Result, Chip_Line, Matched, Timeout => Drain_Timeout);
 
             exit when Result = Expect_Timeout or else Matched (0) = No_Match;
 
@@ -271,8 +285,13 @@ package body Joular_Core.Powermetrics is
 
     function Open (Item : in Source) return Boolean is
     begin
+        -- powermetrics gives no GPU power on Mac Intel
+        if Item = GPU and then not Apple_Silicon then
+            return False;
+        end if;
+
         if not Running then
-            if not Is_Apple_Silicon or else not Is_Root or else not Start then
+            if not Is_Root or else not Start then
                 return False;
             end if;
         end if;
