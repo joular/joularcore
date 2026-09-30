@@ -37,4 +37,14 @@ package body Joular_Core.File_Utils is
             return "";
     end Read_First_Line;
 
+    --------------------------------------------------
+
+    function Read_Integer (File_Name : in String) return Long_Long_Integer is
+    begin
+        return Long_Long_Integer'Value (Read_First_Line (File_Name));
+    exception
+        when others =>
+            return 0;
+    end Read_Integer;
+
 end Joular_Core.File_Utils;

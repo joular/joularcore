@@ -9,20 +9,19 @@
 --  Author : Adel Noureddine
 --
 
+-- Measure the main graphic card
+-- Each OS has its own body, in its folder, listing the ways it can read the GPU and the order they are tried in
 private package Joular_Core.GPU_Monitor is
 
-    -- Detect the main discrete graphic card, and how to get its data
-    -- Ex. Nvidia or AMD card, NVML or ADLX library, hwmon sysfs files, etc.
-    -- Also, opens the library needed to read the GPU card
-    -- Returns True if GPU monitoring is present and accessible, otherwise False
-    function Detect_GPU return Boolean;
+    -- Detect the main graphic card, and how to get its data (e.g. NVML or ADLX library, hwmon sysfs files, powermetrics)
+    -- Opens the library needed to read it
+    -- Returns False when the GPU cannot be measured
+    function Open return Boolean;
 
-    -- Monitor the GPU and take a measurement
-    -- Return the power consumption of the graphic card as reported
-    function Get_GPU_Reading return Measurement;
+    -- One measurement: the power drawn by the card, in watts
+    function Read return Measurement;
 
-    -- Stops monitoring
-    -- For Nvidia and AMD cards, if a library was used (NVML or ADLX), then unload it
-    procedure Stop_Monitoring;
+    -- Close what Open opened (e.g. unload the NVML or ADLX library)
+    procedure Close;
 
 end Joular_Core.GPU_Monitor;

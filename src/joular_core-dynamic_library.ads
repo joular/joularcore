@@ -13,15 +13,13 @@ with System;
 
 -- Load a shared library (instead of linking to it)
 -- The libraries are installed with the drivers of the GPU card (NVML for Nvidia, ADLX for AMD)
+-- The body is in src/posix (dlopen) for Linux, macOS and BSD, and in src/windows (LoadLibraryEx) for Windows
 private package Joular_Core.Dynamic_Library is
 
-    -- Load the shared library
-    -- Returns the null address if the library is not installed
+    -- Load the shared library, from its name or its full path
+    -- On Windows, a name alone is used to check for the library in the system folder (System32), and a full path is loaded from its own folder
+    -- Returns the null address if there is nothing to load
     function Load (Name : in String) return System.Address;
-
-    -- Load a shared library from the full path
-    -- Returns the null address if there is nothing to load there
-    function Load_From_Path (Path : in String) return System.Address;
 
     -- Find a function from an already loaded library
     -- Returns the null address when the library does not have the function

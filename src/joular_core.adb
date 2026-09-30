@@ -9,99 +9,97 @@
 --  Author : Adel Noureddine
 --
 
-with Joular_Core.OS_Utils; use Joular_Core.OS_Utils;
-with Joular_Core.CPU_Monitor; use Joular_Core.CPU_Monitor;
-with Joular_Core.GPU_Monitor; use Joular_Core.GPU_Monitor;
+with Joular_Core.CPU_Monitor;
+with Joular_Core.GPU_Monitor;
 
 package body Joular_Core is
 
-    -- Library version number
     -- Keep it the same as the version in alire.toml
-    Version_Number : constant String := "0.0.3";
+    Version_Number : constant String := "0.0.4";
 
-    -- Variable to check if Open was called and not yet closed
-    Opened : Boolean := False;
+    -- The sources asked for in Open that could be opened
+    Opened_Sources : Source_List := (others => False);
 
-    -- List of components that can be read/accessed from the asked ones
-    Sources_List_Accessible : Source_List := (others => False);
+    --------------------------------------------------
+
+    -- Each source is closed on its own, so a crash on one doesn't prevent the other from closing
+    procedure Close_Source (Item : in Source) is
+    begin
+        case Item is
+            when CPU => CPU_Monitor.Close;
+            when GPU => GPU_Monitor.Close;
+        end case;
+    exception
+        when others =>
+            null;
+    end Close_Source;
+
+    --------------------------------------------------
+
+    -- If anything fails halfway, close it so a driver or library already opened is not left behind
+    function Open_Source (Item : in Source) return Boolean is
+    begin
+        case Item is
+            when CPU => return CPU_Monitor.Open;
+            when GPU => return GPU_Monitor.Open;
+        end case;
+    exception
+        when others =>
+            Close_Source (Item);
+            return False;
+    end Open_Source;
+
+    --------------------------------------------------
+
+    -- A source that fails to answer reports zero, and is still available
+    function Read_Source (Item : in Source) return Measurement is
+    begin
+        case Item is
+            when CPU => return CPU_Monitor.Read;
+            when GPU => return GPU_Monitor.Read;
+        end case;
+    exception
+        when others =>
+            return (Available => True, others => <>);
+    end Read_Source;
 
     --------------------------------------------------
 
     procedure Open (Sources : in Source_List := All_Sources) is
     begin
-        -- Close existing CPU and GPU sources if opened before and not closed for any reason
-        -- So we start with no hardware component already set to accessible
+        -- Start from nothing, in case Open is called twice
         Close;
 
-        -- Check and initialize CPU measurement
-        if Sources (CPU) then
-            -- Detect the CPU vendor or board, then check if CPU monitoring is available and accessible
-            -- Also, this function will take a first reading on cumulative counters (i.e., RAPL)
-            Sources_List_Accessible (CPU) := Detect_CPU (Get_Platform_CPU_Name);
-        end if;
-
-        -- Check and initialize GPU measurement
-        if Sources (GPU) then
-            -- Check if GPU monitoring is available and accessible
-            -- Also, this function will load the libraries needed (NVML for Nvidia, ADLX for AMD) or check for GPU power files (hwmon sysfs for AMD)
-            Sources_List_Accessible (GPU) := Detect_GPU;
-        end if;
-
-        Opened := True;
-    exception
-        when others =>
-            -- If anything failed halfway, close so any driver or library already opened is closed
-            Close;
+        -- Each monitor detects the hardware, and takes a first reading of cumulative counters (e.g. RAPL)
+        for Item in Source loop
+            Opened_Sources (Item) := Sources (Item) and then Open_Source (Item);
+        end loop;
     end Open;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        -- Each monitor is closed on its own, so a crash on one doesn't prevent the other from closing
-        begin
-            CPU_Monitor.Stop_Monitoring;
-        exception
-            when others =>
-                null;
-        end;
+        for Item in Source loop
+            Close_Source (Item);
+        end loop;
 
-        begin
-            GPU_Monitor.Stop_Monitoring;
-        exception
-            when others =>
-                null;
-        end;
-
-        Opened := False;
-        Sources_List_Accessible := (others => False);
+        Opened_Sources := (others => False);
     end Close;
 
     --------------------------------------------------
 
-    function Read (Sources : in Source_List := All_Sources) return Reading is
-        Result : Reading := (others => (others => <>));
+    function Read return Reading is
+        Result : Reading;
     begin
-        if Sources (CPU) and then Sources_List_Accessible (CPU) then
-            Result (CPU) := Get_CPU_Reading;
-        end if;
-        
-        if Sources (GPU) and then Sources_List_Accessible (GPU) then
-            Result (GPU) := Get_GPU_Reading;
-        end if;
-        
+        for Item in Source loop
+            if Opened_Sources (Item) then
+                Result (Item) := Read_Source (Item);
+            end if;
+        end loop;
+
         return Result;
-    exception
-        when others =>
-            return (others => (others => <>));
     end Read;
-
-    --------------------------------------------------
-
-    function Is_Open return Boolean is
-    begin
-        return Opened;
-    end Is_Open;
 
     --------------------------------------------------
 

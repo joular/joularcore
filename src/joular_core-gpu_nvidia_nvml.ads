@@ -13,13 +13,12 @@
 -- Requires the Nvidia driver, on Linux, Windows or BSD
 private package Joular_Core.GPU_Nvidia_NVML is
 
-    -- Checks if an Nvidia card can be read on the system
-    -- Loads NVML, starts it and takes one reading
-    -- Always returns false on unsupported systems (i.e., macOS)
-    function Is_Accessible return Boolean;
+    -- Load NVML, start it and take one reading of the first card
+    -- Returns False when the driver is not installed or no card answers
+    function Open return Boolean;
 
-    -- Get a power reading in watts
-    -- Returns zero if the GPU power cannot be read
+    -- Power drawn by the card, in watts
+    -- Returns zero if the card cannot be read
     function Get_Power return Long_Float;
 
     -- Stop NVML and unload the library

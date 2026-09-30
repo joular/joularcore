@@ -15,4 +15,8 @@ private package Joular_Core.File_Utils is
     -- Returns an empty String when the file doesn't exist, is empty, or cannot be read
     function Read_First_Line (File_Name : in String) return String;
 
+    -- Read the whole number on the first line of a file (e.g. sysfs counters)
+    -- Returns zero when the file cannot be read or does not hold a number
+    function Read_Integer (File_Name : in String) return Long_Long_Integer;
+
 end Joular_Core.File_Utils;

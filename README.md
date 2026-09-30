@@ -5,11 +5,9 @@
 ![Joular Core Logo](joularcore.png)
 
 Joular Core is an Ada library that measures the energy or power consumption of hardware components.
-It detects on its own what the machine offers (which CPU, which GPU, and how to read them), and gives one simple interface: open, read, close.
+It detects automatically what the machine offers (which CPU, which GPU, and how to read them), and gives one simple interface: open, read, close.
 
 It is written in Ada, and also provides a [C interface](include/joularcore.h) so it can be used from any language with a C FFI (C, C++, Java, Python, Rust, etc.).
-
-> Joular Core is under active development and currently in beta quality. Expect rough edges and features still being worked on and polished.
 
 ## :satellite: Supported platforms
 
@@ -17,16 +15,16 @@ It is written in Ada, and also provides a [C interface](include/joularcore.h) so
 |---|---|---|---|---|
 | CPU | Intel, AMD | Linux | RAPL through powercap sysfs | Energy (joules) |
 | CPU | Intel, AMD | Windows | RAPL through the [Energy Meter Interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface) (nothing to install), or the RAPL MSR through [PawnIO](https://pawnio.eu) or [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) | Energy (joules) |
-| CPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
+| CPU | Apple Silicon, Intel Macs | macOS | powermetrics (installed with macOS) | Power (watts) |
 | CPU | Raspberry Pi | Linux | Regression power models | Power (watts) |
-| GPU | Nvidia cards | Linux, Windows | NVML (installed with the Nvidia driver) | Power (watts) |
+| GPU | Nvidia cards | Linux, Windows, BSD | NVML (installed with the Nvidia driver) | Power (watts) |
 | GPU | AMD cards | Linux | amdgpu hwmon sysfs | Power (watts) |
 | GPU | AMD cards | Windows | ADLX (installed with the AMD driver) | Power (watts) |
 | GPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 
 For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board.
-On macOS, only Apple Silicon Macs are supported: their CPU and the GPU built in the same chip are both read from powermetrics, one reading each.
-Mac Intel are not supported. BSD support is planned and will come in a future version.
+On macOS, Apple Silicon Macs give their CPU and the GPU built in the same chip, both read from powermetrics, one reading each.
+Intel Macs give the CPU only. On BSD, only Nvidia GPUs are implemented for now (CPU support is planned).
 
 ## Required privileges
 
@@ -34,11 +32,11 @@ Joular Core is a library, so the privileges below are needed for the *program us
 
 - **Linux CPU (RAPL)**: reading `energy_uj` needs elevated access (root or read permissions) on most kernels. Run your program with `sudo`, or give the powercap files read permission.
 - **Windows CPU (RAPL)**: if using EMI interface, then there is no special privileges or driver needed. Otherwise, we need specific RAPL driver.
-  - The [Energy Meter Interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface) is the one used by default and checked first, and needs **no install and no elevated access**. Windows 11 publishes the RAPL domains of the processor on it, so it works out of the box on those machines. Windows 10 only publishes a meter when the machine carries one of its own, and such a meter rarely measures the processor package, in which case Joular Core turns it down and uses the RAPL drivers below rather than reporting something else as the CPU.
-  - [PawnIO](https://pawnio.eu) is the main RAPL driver used (after EMI): it is maintained and properly signed, and its installer is all that is needed, as Joular Core carries the modules it loads. This is the one used when both drivers are installed. It needs elevated access, so run the program using the library with such access (i.e., from a terminal with administrative rights).
+  - The [Energy Meter Interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface) is the one used by default and checked first, and needs **no installation and no elevated access**, and works only on Windows 11.
+  - [PawnIO](https://pawnio.eu) is the main RAPL driver used (after EMI): it is maintained and properly signed, and its installer is all that is needed, as Joular Core carries the modules it loads. It needs elevated access, so run the program using the library with such access (i.e., from a terminal with administrative rights).
   - [Hubblo's RAPL driver](https://github.com/hubblo-org/windows-rapl-driver) still works and is used when PawnIO is not there. It does not require elevated access, but its development has paused and not actively maintained by their authors. The easiest way to install a signed version is through the [Scaphandre installer](https://github.com/hubblo-org/scaphandre/releases/download/v1.0.0/scaphandre_v1.0.0_installer.exe).
 - **macOS CPU and GPU (powermetrics)**: `powermetrics` only runs as the superuser, so run your program with `sudo`. Without it, both sources are simply reported as not available.
-- Raspberry Pi models, and GPU readings on Linux and Windows, need no special privileges.
+- Raspberry Pi models, and GPU readings on Linux, Windows and BSD, need no special privileges.
 
 ### Choosing how the Windows RAPL counter is read
 
@@ -67,7 +65,8 @@ Or directly with GNAT:
 gprbuild -P joularcore.gpr
 ```
 
-The build produces a static library by default, and detects the OS on its own to compile the appropriate version: Linux, Windows, macOS and the BSDs are each recognised from the target gprbuild reports, so nothing has to be passed. `-XPJ_OS` still overrides it when the version to build is not the one of the machine building it (ex. `-XPJ_OS=windows`). Alire sets it too.
+The build produces a static library by default, and detects the OS on its own to compile the appropriate version: Linux, Windows, macOS, and BSD systems are each recognised from the target gprbuild reports.
+`-XPJ_OS` overrides it when the version to build is not the one of the machine building it (e.g. `-XPJ_OS=windows`).
 
 For other library types (shared, etc.), set `-XJOULARCORE_LIBRARY_TYPE`:
 
@@ -75,7 +74,7 @@ For other library types (shared, etc.), set `-XJOULARCORE_LIBRARY_TYPE`:
 gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable
 ```
 
-`relocatable` builds the shared library (`libJoular_Core.so` / `.dll` / `.dylib`) that carries the C interface, is stand-alone (it starts itself up when loaded), and on Linux and Windows is encapsulated (it carries the Ada runtime too, so it is one self-contained file). On macOS it cannot be encapsulated, so the Ada runtime stays a file of its own that has to be found when the library is loaded: the Makefiles of the examples take care of it, as shown below.
+`relocatable` builds the shared library (`libjoularcore.so` / `.dll` / `.dylib`) that carries the C interface, is stand-alone (it starts itself up when loaded), and on Linux and Windows is encapsulated (it carries the Ada runtime too, so it is one self-contained file). On macOS it cannot be encapsulated, so the Ada runtime stays a file of its own: the library records the folder of the runtime of the compiler that built it, and loads it from there with nothing to set (no `DYLD_LIBRARY_PATH`, so it also works under `sudo` and from `/usr/bin/java` or the system's Python).
 
 ## Using from Ada
 
@@ -109,9 +108,7 @@ gprbuild -P example/example.gpr
 ./example/example_joular_core
 ```
 
-Reading the CPU needs root on Linux (the RAPL counter in `/sys/class/powercap/intel-rapl` is only readable by root on most distributions) and on macOS (`powermetrics` only answers root), so run it with `sudo` there. On Windows it depends on the reader: the Energy Meter Interface and Hubblo's driver read from any terminal, PawnIO only from an elevated one. When the CPU does not open, the example says what applies to the OS it was built for.
-
-It takes two optional arguments, in any order. On Windows, `emi`, `pawnio` or `hubblo` indicates how the RAPL counter is to be read (rather than trying them in turn), and a number stops the program after that many readings instead of running until Ctrl+C. A summary is printed at the end.
+It takes two optional arguments, in any order. On Windows, `emi`, `pawnio` or `hubblo` indicates how the RAPL counter is to be read (rather than trying them in turn), and a number of readings to do before stopping the program. A summary is printed at the end.
 
 ```bash
 ./example/example_joular_core emi 10
@@ -121,18 +118,18 @@ With Alire, add the library to your project with `alr with joularcore`.
 
 ## Using from C (and any other language)
 
-The C declarations are in [include/joularcore.h](include/joularcore.h). Build the relocatable library, then:
+The C declarations are in [include/joularcore.h](include/joularcore.h). Build the relocatable (shared) library, then:
 
 ```c
 #include "joularcore.h"
 
-joular_reading reading;
+joularcore_reading reading;
 
-joular_open(1, 1);   /* measure the CPU and the GPU */
-joular_read(&reading);
+joularcore_open(1, 1);   /* measure the CPU and the GPU */
+joularcore_read(&reading);
 if (reading.cpu.available)
     printf("CPU: %f %s\n", reading.cpu.value, reading.cpu.unit == 0 ? "J" : "W");
-joular_close();
+joularcore_close();
 ```
 
 A full example program is in [example/c/main.c](example/c/main.c). Like the Ada one, it reads once per second until stopped with Ctrl+C, which closes the sources cleanly. It comes with a [Makefile](example/c/Makefile) that builds the shared library and the program.
@@ -146,10 +143,10 @@ gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable
 Then compile the C program:
 
 ```bash
-gcc example/c/main.c -Iinclude -Llib/relocatable -lJoular_Core -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
+gcc example/c/main.c -Iinclude -Llib/relocatable -ljoularcore -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
 ```
 
-`-I` is the folder holding `joularcore.h`, `-L` and `-l` the library to link with, and `-rpath` the folder where the program looks for the library when it runs. Without `-rpath`, the program still compiles but stops on start with a "library not loaded" error, unless you set `LD_LIBRARY_PATH` yourself. Windows has no `-rpath`: put a copy of the DLL next to the program instead. On macOS, add a second `-rpath` for the folder of the Ada runtime (`gnatls -v | grep adalib`), which the library does not carry there.
+`-I` is the folder holding `joularcore.h`, `-L` and `-l` the library to link with, and `-rpath` the folder where the program looks for the library when it runs. Without `-rpath`, the program still compiles but stops on start with a "library not loaded" error, unless you set `LD_LIBRARY_PATH` yourself. Windows has no `-rpath`: put a copy of the DLL next to the program instead.
 
 ## Using from Python
 
@@ -159,26 +156,24 @@ From Python, the same interface through ctypes:
 import ctypes
 
 class Measurement(ctypes.Structure):
-    _fields_ = [("available", ctypes.c_int), ("value", ctypes.c_double), ("unit", ctypes.c_int)]
+    _fields_ = [("value", ctypes.c_double), ("available", ctypes.c_int), ("unit", ctypes.c_int)]
 
 class Reading(ctypes.Structure):
     _fields_ = [("cpu", Measurement), ("gpu", Measurement)]
 
-lib = ctypes.CDLL("lib/relocatable/libJoular_Core.so")
-lib.joular_read.argtypes = [ctypes.POINTER(Reading)]
-lib.joular_version.restype = ctypes.c_char_p
+lib = ctypes.CDLL("lib/relocatable/libjoularcore.so")
+lib.joularcore_read.argtypes = [ctypes.POINTER(Reading)]
+lib.joularcore_version.restype = ctypes.c_char_p
 
-lib.joular_open(1, 1)   # measure the CPU and the GPU
+lib.joularcore_open(1, 1)   # measure the CPU and the GPU
 r = Reading()
-lib.joular_read(ctypes.byref(r))
+lib.joularcore_read(ctypes.byref(r))
 if r.cpu.available:
     print("CPU:", r.cpu.value, "J" if r.cpu.unit == 0 else "W")
-lib.joular_close()
+lib.joularcore_close()
 ```
 
 A full example program is in [example/python/main.py](example/python/main.py). Like the C one, it reads once per second until stopped with Ctrl+C, which closes the sources cleanly. It comes with a [Makefile](example/python/Makefile) that builds the shared library. Note that it puts Python's Ctrl+C handler back after loading the library: the Ada runtime installs its own while it starts up, and without that line Ctrl+C is ignored.
-
-On macOS, the loader is told where the Ada runtime is through `DYLD_LIBRARY_PATH`, which `sudo` drops for the Python shipped with the system. Reading the CPU and the GPU there needs both, so run it as root with a Python of your own (Homebrew's, for example), or with `sudo env DYLD_LIBRARY_PATH=...`.
 
 Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and every other language with a C FFI work the same way.
 
@@ -188,7 +183,7 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 - Others report **power**: the watts being drawn when read (Raspberry Pi models, GPUs).
 - A source that is not present, not supported, or not accessible is reported as **not available**, which will not prevent other sources from working (i.e., CPU not available but GPU is available, the library will continue working as this is not an error).
 - A source that was available but stops answering reports a value of **zero**.
-- On macOS, the value is the **average power over the last sample window**, which powermetrics takes once a second. Reading more often than that hands back the same window again rather than a new measurement, and a window is dropped once it is a few seconds old. Opening the sources waits for a first whole sample, so it takes about a second there.
+- On macOS, the value is the **average power over the last sample window**, which powermetrics takes once a second. Reading more often than that hands back the same window again rather than a new measurement, and a window is dropped once it is a few seconds old. Reading less often than every few seconds restarts powermetrics, so that reading waits about a second for a new sample. Opening the sources waits for a first whole sample, so it takes about a second there.
 - The library is **not thread safe**: call open, read and close from a single thread, as one monitoring loop is the intended use for the current version.
 
 ### What each source actually measures
@@ -200,17 +195,21 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 | Raspberry Pi | A model-based estimate: a regression on CPU load, evaluated over the interval between two readings. It is not a reading of the board's actual draw |
 | Nvidia (NVML) | What the card reports for the whole GPU board. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
 | AMD on Linux (hwmon) | Whole GPU board power, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
-| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is settled when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
-| macOS | The CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them |
+| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is choosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
+| macOS | Apple Silicon: the CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them. Intel Macs: the whole chip (cores, integrated GPU and system agent), like the RAPL package on Linux and Windows |
 
 RAPL counters wrap when they fill, and the library corrects that. The correction only works if less energy was used between two readings than the counter holds. How long the counter takes to fill depends on the energy unit of the processor.
-The Energy Meter Interface (EMI) on Windows correct for the wrap by itself, so Joular Core doesn't need to do the correction.
+The Energy Meter Interface (EMI) on Windows corrects for the wrap by itself, so Joular Core doesn't need to do the correction.
 
 ## Adding new hardware or a new OS
 
-Each hardware component is one package with three functions: `Is_Accessible` (detect and open), `Get_Power` or `Get_Energy` (one reading), and `Close`. The monitors ([CPU_Monitor](src/joular_core-cpu_monitor.adb), [GPU_Monitor](src/joular_core-gpu_monitor.adb)) try each package in order and keep the first one that answers. To support new hardware, write such a package and add it to the monitor's detection. OS specific code is selected with preprocessor symbols (`PJ_LINUX`, `PJ_WINDOWS`, `PJ_MACOS`, `PJ_BSD`) set by [joularcore.gpr](joularcore.gpr).
+Each hardware component is one package with three functions: `Open` (detect and open, returning `False` when the hardware is not there or cannot be read), `Get_Power` or `Get_Energy` (one reading, in watts or joules), and `Close`.
 
-Windows RAPL splits this further, as the same counter is reached in several ways. [RAPL_Windows](src/joular_core-rapl_windows.adb) tries each way in order and keeps the first that answers: [RAPL_EMI_Windows](src/joular_core-rapl_emi_windows.adb), which read RAPL from EMI interface, then [RAPL_MSR_Windows](src/joular_core-rapl_msr_windows.adb), which reads the MSR registers with a driver. That second one keeps the vendor detection and the counter abstract, and hands the reading of a single register to one of two interchangeable packages, [MSR_PawnIO](src/joular_core-msr_pawnio.adb) and [MSR_Hubblo](src/joular_core-msr_hubblo.adb). All of them share the small set of Win32 bindings in [Win32](src/joular_core-win32.ads). Supporting another driver means writing another such package with `Open`, `Read` and `Close`, and adding it to the list tried in `Open`.
+The code shared by every OS is in [src](src), and the code of each OS is in its own folder, picked by [joularcore.gpr](joularcore.gpr) from `PJ_OS`: [src/linux](src/linux), [src/windows](src/windows), [src/macos](src/macos) and [src/bsd](src/bsd), with [src/posix](src/posix) holding what Linux, macOS and the BSDs do the same way (loading a shared library). Each OS folder has its own body of the two monitors, `CPU_Monitor` and `GPU_Monitor` (for example [src/linux/joular_core-cpu_monitor.adb](src/linux/joular_core-cpu_monitor.adb)), which lists the packages that can read that hardware on that OS, tries them in order and keeps the first one that answers. To support new hardware, write such a package in the folder of the OS it runs on (or in `src` if it is portable, like [NVML](src/joular_core-gpu_nvidia_nvml.adb)), and add it to the monitor of that OS. To support a new OS, add its folder with its two monitors, and add it to `PJ_OS` in the project file.
+
+Windows RAPL splits this further, as the same counter is reached in several ways. [RAPL_Windows](src/windows/joular_core-rapl_windows.adb) tries each way in order and keeps the first that answers: [RAPL_EMI_Windows](src/windows/joular_core-rapl_emi_windows.adb), which read RAPL from EMI interface, then [RAPL_MSR_Windows](src/windows/joular_core-rapl_msr_windows.adb), which reads the MSR registers with a driver. That second one keeps the vendor detection and the counter abstract, and hands the reading of a single register to one of two interchangeable packages, [MSR_PawnIO](src/windows/joular_core-msr_pawnio.adb) and [MSR_Hubblo](src/windows/joular_core-msr_hubblo.adb). All of them share the small set of Win32 bindings in [Win32](src/windows/joular_core-win32.ads). Supporting another driver means writing another such package with `Open`, `Read` and `Close`, adding it to `Driver_Kind` in `RAPL_MSR_Windows`, and to the list tried in `RAPL_Windows.Open`.
+
+The RAPL counters of Linux and Windows wrap the same way, so the energy between two readings is shared in [Energy_Counters](src/joular_core-energy_counters.adb).
 
 ## Third party components
 
@@ -218,10 +217,10 @@ Joular Core carries two [PawnIO modules](https://github.com/namazso/PawnIO.Modul
 
 They are licensed under the GNU Lesser General Public License version 2.1 or later, copyright namazso and contributors. A copy of that license is in [tools/pawnio/COPYING](tools/pawnio/COPYING), next to the modules themselves.
 
-They are turned into [joular_core-pawnio_modules.ads](src/joular_core-pawnio_modules.ads) by [tools/gen_pawnio_modules.py](tools/gen_pawnio_modules.py), which is also how that file is regenerated when a newer release is taken:
+They are turned into [joular_core-pawnio_modules.ads](src/windows/joular_core-pawnio_modules.ads) by [tools/gen_pawnio_modules.py](tools/gen_pawnio_modules.py), which is also how that file is regenerated when a newer release is taken:
 
 ```bash
-python3 tools/gen_pawnio_modules.py > src/joular_core-pawnio_modules.ads
+python3 tools/gen_pawnio_modules.py
 ```
 
 The SHA-256 of each module is pinned in that script, which refuses to write anything when a module on disk is not the one it expects, so taking a newer release means updating those digests along with the files. Running it with `--check` writes nothing and only reports whether the modules, their digests and the committed package still agree, which is what CI runs on every push:
@@ -232,7 +231,7 @@ python3 tools/gen_pawnio_modules.py --check
 
 ## 📜 License
 
-Joular Core is licensed under the GNU Lesser General Public License 3 license only (LGPL-3.0-only).
+Joular Core is licensed under the GNU Lesser General Public License 3 license only (LGPL-3.0-only). 
 
 Copyright © 2026, Adel Noureddine.
 All rights reserved. This program and the accompanying materials are made available under the terms of the [GNU Lesser General Public License v3.0 (LGPL-3.0-only)](https://www.gnu.org/licenses/lgpl-3.0.en.html) which accompanies this distribution.
