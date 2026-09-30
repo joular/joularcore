@@ -12,6 +12,7 @@ lib/
 example/example_joular_core
 example/c/example_c
 example/c/*.dll
+example/python/*.dll
 example/python/__pycache__
 *.exe
 

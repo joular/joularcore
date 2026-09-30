@@ -16,20 +16,18 @@ The PawnIO driver has no way of its own to read a model specific register: it ru
 
 Usage, from the root of the repository:
 
-    python3 tools/gen_pawnio_modules.py > src/joular_core-pawnio_modules.ads
+    python3 tools/gen_pawnio_modules.py
 
 It reads the modules from tools/pawnio, whose contents come from:
 https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11
 
-The SHA-256 of each module is pinned below and checked before anything is written, so a module that was replaced, truncated or picked up from another
-release is refused rather than carried into the library.
-The driver checks the modules' signature of its own when it loads them, which is what actually keeps an unsigned module out.
-The check here is what keeps the file committed to this repository the one that was reviewed.
+The SHA-256 of each module is pinned below and checked before anything is written, so a replaced, truncated or wrong-release module is refused.
+The driver checks the signature itself when loading; the check here keeps the committed file the one that was reviewed.
 
     python3 tools/gen_pawnio_modules.py --check
 
-checks the same digests and then compares the generated package against the one committed, without writing anything, and exits non zero if they differ.
-That is what CI runs, so the modules, their digests and the committed package cannot drift apart unnoticed.
+checks the same digests and compares the generated package against the one committed, without writing anything, and exits non zero if they differ.
+CI runs it, so the modules, their digests and the committed package cannot drift apart unnoticed.
 """
 
 import hashlib
@@ -49,7 +47,7 @@ MODULES = [
 ]
 
 #  The package this script writes, relative to the root of the repository
-GENERATED = "src/joular_core-pawnio_modules.ads"
+GENERATED = "src/windows/joular_core-pawnio_modules.ads"
 
 BYTES_PER_LINE = 12
 
@@ -57,7 +55,7 @@ BYTES_PER_LINE = 12
 def read_modules(tools_dir):
     """Read every module and check it against its pinned digest.
 
-    Gives back the list of (ada_name, file_name, blob, digest), or None after having said on standard error what is wrong with the ones on disk.
+    Returns a list of (ada_name, file_name, blob, digest), or None after saying on stderr what is wrong.
     """
     blobs = []
 
@@ -107,7 +105,7 @@ def render(blobs):
 --  Author : Adel Noureddine
 --
 --  GENERATED FILE, DO NOT EDIT BY HAND
---  Regenerate it with: python3 tools/gen_pawnio_modules.py > src/joular_core-pawnio_modules.ads
+--  Regenerate it with: python3 tools/gen_pawnio_modules.py
 --
 --  The modules below are taken byte for byte from release %s of
 --  %s
@@ -126,16 +124,12 @@ def render(blobs):
 
     out.append("""--
 
-#if PJ_WINDOWS then
 with System.Storage_Elements; use System.Storage_Elements;
-#end if;
 
 -- The PawnIO modules that read the registers, one for each CPU vendor
 -- They are given to the driver as they are, which checks their signature and
 -- runs their main, and that main refuses a machine the module was not made for
 private package Joular_Core.PawnIO_Modules is
-
-#if PJ_WINDOWS then
 
 """)
 
@@ -155,8 +149,6 @@ private package Joular_Core.PawnIO_Modules is
             out.append("\n")
 
     out.append("""
-#end if;
-
 end Joular_Core.PawnIO_Modules;
 """)
 
@@ -178,12 +170,12 @@ def main(argv) -> int:
         return 1
 
     rendered = render(blobs)
-
-    if not checking:
-        sys.stdout.write(rendered)
-        return 0
-
     committed = tools_dir.parent / GENERATED
+
+    # Written from here, after the digests matched, so a refused module never leaves an empty file behind
+    if not checking:
+        committed.write_bytes(rendered.encode("utf-8"))
+        return 0
 
     if not committed.is_file():
         sys.stderr.write("missing %s\n" % committed)
@@ -192,8 +184,8 @@ def main(argv) -> int:
     if committed.read_bytes() != rendered.encode("utf-8"):
         sys.stderr.write(
             "%s is not what the modules in tools/pawnio produce\n"
-            "Regenerate it with: python3 tools/gen_pawnio_modules.py > %s\n"
-            % (GENERATED, GENERATED)
+            "Regenerate it with: python3 tools/gen_pawnio_modules.py\n"
+            % GENERATED
         )
         return 1
 

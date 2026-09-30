@@ -9,20 +9,19 @@
 --  Author : Adel Noureddine
 --
 
+-- Measure the CPU
+-- Each OS has its own body, in its folder, listing the ways it can read the CPU and the order they are tried in
 private package Joular_Core.CPU_Monitor is
 
-    -- Detect CPU packages and characteristics
-    -- Ex.: RAPL max range, PKG supported, Raspberry Pi board model, MSR or powercap, etc.
-    -- Return True is CPU monitoring is present and accessible, otherwise False
-    function Detect_CPU (Platform : in String) return Boolean;
+    -- Detect the CPU and how to read it (e.g. RAPL, Raspberry Pi board model, powermetrics)
+    -- Opens the files, drivers or processes needed, and takes a first reading of cumulative counters
+    -- Returns False when the CPU cannot be measured
+    function Open return Boolean;
 
-    -- Monitor the CPU energy and take a measurement
-    -- Return the energy consumed since last reading, or the power consumption as reported by hardware
-    function Get_CPU_Reading return Measurement;
+    -- One measurement: the energy consumed since the last reading, or the power drawn, depending on what the hardware reports
+    function Read return Measurement;
 
-    -- Stops monitoring
-    -- For RAPL, if a driver was used (on Windows for example), then close driver
-    -- For powermetrics (macOS), kill the spawned process
-    procedure Stop_Monitoring;
+    -- Close what Open opened (e.g. a driver on Windows, the powermetrics process on macOS)
+    procedure Close;
 
 end Joular_Core.CPU_Monitor;

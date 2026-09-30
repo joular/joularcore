@@ -10,14 +10,14 @@
  */
 
 /*
- * C interface of Joular Core, a library measuring the energy or power consumption of hardware components (CPU and GPU)
+ * C interface of Joular Core, a library measuring the energy or power consumption of the CPU and the GPU
  *
- * Use it with the relocatable (shared) build of the library (libJoular_Core.so on Linux, Joular_Core.dll on Windows, libJoular_Core.dylib on macOS), which starts itself up when loaded: no other initialization call is needed
+ * Use it with the relocatable (shared) build of the library (libjoularcore.so on Linux, libjoularcore.dll on Windows, libjoularcore.dylib on macOS), which starts itself up when loaded: no other initialization call is needed
  *
- * The library is not thread safe: call joular_open, joular_read and joular_close from a single thread
+ * The library is not thread safe: call joularcore_open, joularcore_read and joularcore_close from a single thread
  *
  * Some hardware sources report energy consumed since the previous reading (unit 0, joules) and others report the power being drawn (unit 1, watts)
- * Energy counters wrap after a few minutes under load, so read at least once per minute to not miss a wrap (for RAPL)
+ * Energy counters (RAPL) wrap after a few minutes under load, so read at least once per minute to not miss a wrap
  */
 
 #ifndef JOULARCORE_H
@@ -28,35 +28,32 @@ extern "C" {
 #endif
 
 /* One measurement of one hardware source */
-typedef struct joular_measurement {
-    int    available;  /* 1 when the source was requested and read, 0 otherwise */
+typedef struct joularcore_measurement {
     double value;      /* energy or power value, see unit */
+    int    available;  /* 1 when the source was requested and read, 0 otherwise */
     int    unit;       /* 0 when value is energy in joules, 1 when it is power in watts */
-} joular_measurement;
+} joularcore_measurement;
 
 /* One reading of every hardware source */
-typedef struct joular_reading {
-    joular_measurement cpu;
-    joular_measurement gpu;
-} joular_reading;
+typedef struct joularcore_reading {
+    joularcore_measurement cpu;
+    joularcore_measurement gpu;
+} joularcore_reading;
 
-/* Check the hardware sources asked for (nonzero = measure it) and open any needed files or drivers
- * Sources that are not present or not accessible are simply reported as not available by joular_read */
-void joular_open(int cpu, int gpu);
+/* Detect the hardware sources asked for (nonzero = measure it) and open any needed files or drivers
+ * A source that is not there, or cannot be read, is simply reported as not available by joularcore_read */
+void joularcore_open(int cpu, int gpu);
 
-/* Take one reading of every hardware source opened by joular_open and write it into *out
+/* Take one reading of every hardware source opened by joularcore_open and write it into *out
  * A source that could not be opened has available = 0
- * a source that stops answering reports a value of 0 */
-void joular_read(joular_reading *out);
+ * A source that stops answering reports a value of 0 */
+void joularcore_read(joularcore_reading *out);
 
-/* Close the files or drivers opened by joular_open */
-void joular_close(void);
-
-/* Return 1 when joular_open was called and not yet closed, 0 otherwise */
-int joular_is_open(void);
+/* Close the files or drivers opened by joularcore_open */
+void joularcore_close(void);
 
 /* Return the version of the library, owned by the library (do not free it) */
-const char *joular_version(void);
+const char *joularcore_version(void);
 
 #ifdef __cplusplus
 }

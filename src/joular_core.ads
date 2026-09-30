@@ -10,29 +10,27 @@
 --
 
 -- Joular Core measures the energy or power consumption of hardware components
--- The library is not task safe: call Open, Read and Close from a single task/thread
+-- The library is not task safe: call Open, Read and Close from a single task
 package Joular_Core is
 
-    -- The type for the hardware sources to measure
-    -- Currently we support CPUs (Intel, AMD, Raspberry Pi) and GPUs (Nvidia, AMD)
-    -- Joular Core detects the proper CPU or GPU model in the device
+    -- The hardware sources to measure
+    -- CPUs: Intel and AMD (RAPL), Apple Silicon, Raspberry Pi and other boards
+    -- GPUs: Nvidia, AMD, Apple Silicon
+    -- Joular Core detects automatically the available sources and how to read them
     type Source is (CPU, GPU);
 
-    -- List of hardware sources to measure
-    -- Only the ones set to True will be measured
+    -- Which sources to measure: only the ones set to True
     type Source_List is array (Source) of Boolean;
 
-    -- A constant that sets all hardware sources to True
-    -- Useful to simplify using Source_List
     All_Sources : constant Source_List := (others => True);
 
-    --  The unit of the measurement
+    -- Energy: joules consumed since the previous Read (the first Read counts from Open)
+    -- Power: watts being drawn at the time of the Read
     type Measurement_Unit is (Energy, Power);
 
-    -- The type for a measurement
-    -- Available : if hardware source has been requested and can be read, otherwise False
-    -- Value : energy or power value
-    -- Example: CPU using RAPL will give Energy, while Raspberry Pi models will give Power
+    -- Available : the source was requested and can be read
+    -- Value : joules or watts, depending on Unit
+    -- E.g. a CPU read through RAPL gives Energy, a Raspberry Pi gives Power
     type Measurement is
        record
            Available : Boolean := False;
@@ -40,25 +38,21 @@ package Joular_Core is
            Unit : Measurement_Unit := Energy;
        end record;
 
-    -- The type for the list of measurements for each hardware source
+    -- One measurement per hardware source
     type Reading is array (Source) of Measurement;
 
-    -- Check the list of hardware sources if available and can be read
-    -- Open any needed files or drivers
+    -- Detect the hardware sources asked for, and open the files, drivers or processes needed to read them
+    -- A source that is not there, or cannot be read, is reported as not available by Read
     procedure Open (Sources : in Source_List := All_Sources);
 
-    -- Close opened files or drivers that were already opened in Open procedure or during reading
+    -- Close what Open opened
     procedure Close;
 
-    -- Take one reading for each of the hardware sources set to True in Sources
-    -- Returns a Reading type: a list of measurement (value, unit) for each hardware source
-    -- A source that fails to answer reports a value of zero (with Available still True)
-    -- Energy counters (i.e., RAPL) wrap after a few minutes under load, so read at least once per minute to not miss a wrap
-    -- The exception is the meter Windows publishes, which hands over a counter Windows has already added up across those wraps
-    function Read (Sources : in Source_List := All_Sources) return Reading;
-
-    -- Return True if Open procedure was already called and not closed
-    function Is_Open return Boolean;
+    -- Take one reading of every source Open could open
+    -- A source that fails to answer reports a value of zero, with Available still True
+    -- Energy counters (e.g. RAPL) wrap after a few minutes under load, so read at least once per minute to not miss a wrap
+    -- For Windows using EMI, the wrap is handled by EMI directly
+    function Read return Reading;
 
     -- Return the version of the library as a String
     function Version return String;

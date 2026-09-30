@@ -37,17 +37,16 @@ jobs:
           choco install make --no-progress -y
           alr exec -- make -C example/c
 
+      # Own object folders, so the objects of the library built above are not replaced
       - name: Compile-check the BSD branch (Linux)
         if: runner.os == 'Linux'
-        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c
+        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c --subdirs=check-bsd
 
-      # Windows gets the processor with CPUID, which only compiles on an x86 (not ARM) CPU
-      # Linux runner here is x86, so we test that too for Windows
+      # The Windows branch uses CPUID, which only compiles on x86; the Linux runner is x86
       - name: Compile-check the Windows branch (Linux, x86)
         if: runner.os == 'Linux'
-        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=windows -XPJ_X86=True -f -c
+        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=windows -XPJ_X86=True -f -c --subdirs=check-windows
 
-      # The examples take a number of readings and stop
       - name: Run the examples for a few readings
         shell: bash
         run: |
@@ -65,5 +64,5 @@ jobs:
 
       - name: Check the PawnIO modules against the package carrying them (Linux)
         if: runner.os == 'Linux'
-        # Checks the pinned SHA-256 of tools/pawnio/*.bin, then that src/joular_core-pawnio_modules.ads is still what those modules produce, so a module and the package carrying it cannot drift apart unnoticed
+        # Checks the pinned SHA-256 of tools/pawnio/*.bin, then that the committed package matches what they produce
         run: python3 tools/gen_pawnio_modules.py --check

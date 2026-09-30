@@ -44,17 +44,17 @@ UNIT_WATTS = 1
 
 
 class Measurement(ctypes.Structure):
-    """One measurement of one hardware source, matches struct joular_measurement."""
+    """One measurement of one hardware source, matches struct joularcore_measurement."""
 
     _fields_ = [
-        ("available", ctypes.c_int),  # 1 when the source was requested and read, 0 otherwise
         ("value", ctypes.c_double),   # energy or power value, see unit
+        ("available", ctypes.c_int),  # 1 when the source was requested and read, 0 otherwise
         ("unit", ctypes.c_int),       # 0 when value is energy in joules, 1 when it is power in watts
     ]
 
 
 class Reading(ctypes.Structure):
-    """One reading of every hardware source, matches struct joular_reading."""
+    """One reading of every hardware source, matches struct joularcore_reading."""
 
     _fields_ = [
         ("cpu", Measurement),
@@ -65,10 +65,10 @@ class Reading(ctypes.Structure):
 def library_names():
     """The name the shared library takes on this OS."""
     if sys.platform == "win32":
-        return ("libJoular_Core.dll", "Joular_Core.dll")
+        return ("libjoularcore.dll", "joularcore.dll")
     if sys.platform == "darwin":
-        return ("libJoular_Core.dylib",)
-    return ("libJoular_Core.so",)
+        return ("libjoularcore.dylib",)
+    return ("libjoularcore.so",)
 
 
 def find_library():
@@ -98,31 +98,28 @@ def load_library():
     try:
         library = ctypes.CDLL(str(library_file))
     except OSError as error:
-        # The library is there, but something it needs is not: on macOS that is the Ada runtime, which the library carries on Linux and Windows but not there, so it has to be found when loading
-        # Only the first line, which names what is missing: the loader follows it with every folder it looked into, which is pages long
+        # On macOS the library does not carry the Ada runtime and looks for it in the folder of the compiler that built it
+        # Only the first line: the loader follows it with every folder it looked into
         message = ["Joular Core shared library found, but could not be loaded:",
                    "    {}".format(str(error).splitlines()[0])]
 
         if sys.platform == "darwin":
-            message.append("\nRun it with 'make run' here, which sets the folder of the Ada runtime, or set it yourself:\n"
-                           "    DYLD_LIBRARY_PATH=$(gnatls -v | grep adalib | tr -d ' ') python3 main.py")
+            message.append("\nThe Ada runtime is no longer in the folder of the compiler that built the library, so rebuild it with the GNAT of this machine:\n"
+                           "    gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable")
 
         sys.exit("\n".join(message))
 
-    library.joular_open.argtypes = [ctypes.c_int, ctypes.c_int]
-    library.joular_open.restype = None
+    library.joularcore_open.argtypes = [ctypes.c_int, ctypes.c_int]
+    library.joularcore_open.restype = None
 
-    library.joular_read.argtypes = [ctypes.POINTER(Reading)]
-    library.joular_read.restype = None
+    library.joularcore_read.argtypes = [ctypes.POINTER(Reading)]
+    library.joularcore_read.restype = None
 
-    library.joular_close.argtypes = []
-    library.joular_close.restype = None
+    library.joularcore_close.argtypes = []
+    library.joularcore_close.restype = None
 
-    library.joular_is_open.argtypes = []
-    library.joular_is_open.restype = ctypes.c_int
-
-    library.joular_version.argtypes = []
-    library.joular_version.restype = ctypes.c_char_p
+    library.joularcore_version.argtypes = []
+    library.joularcore_version.restype = ctypes.c_char_p
 
     return library
 
@@ -140,8 +137,7 @@ def measurement_text(name, measurement):
 
 
 def wanted_readings(argv):
-    """How many readings to take before stopping, or zero to run until Ctrl+C.
-    """
+    """How many readings to take before stopping, or zero to run until Ctrl+C."""
     if len(argv) <= 1:
         return 0
 
@@ -162,37 +158,33 @@ def main():
     wanted = wanted_readings(sys.argv)
     taken = 0
 
-    # The Ada runtime inside the shared library installs its own Ctrl+C handler while it starts up, which takes the place of the one Python installed before it
-    # Putting Python's back here, after the library is loaded, is what makes Ctrl+C raise KeyboardInterrupt and stop the loop below
+    # The Ada runtime in the library installs its own Ctrl+C handler on load, replacing Python's
+    # Put Python's back so Ctrl+C raises KeyboardInterrupt
     signal.signal(signal.SIGINT, signal.default_int_handler)
 
-    print("Joular Core", library.joular_version().decode())
+    print("Joular Core", library.joularcore_version().decode())
 
-    # Detect and open every supported hardware source (CPU and GPU)
-    library.joular_open(1, 1)
+    library.joularcore_open(1, 1)
 
     try:
         while True:
             time.sleep(1.0)
 
-            # Take one reading of all the hardware sources opened above
-            library.joular_read(ctypes.byref(reading))
+            library.joularcore_read(ctypes.byref(reading))
 
-            # flush so the readings still come out one per second when the output is piped into another program or into a file
+            # Flushed so the readings still come out one per second when piped
             print(measurement_text("CPU", reading.cpu),
                   measurement_text("GPU", reading.gpu),
                   sep=" | ", flush=True)
 
-            # Only when a count was asked for, as zero means running until Ctrl+C
             taken += 1
             if wanted and taken >= wanted:
                 break
     except KeyboardInterrupt:
-        # Ctrl+C interrupts the sleep above, so the loop stops here instead of being killed on the spot, and the sources are closed below
+        # Ctrl+C interrupts the sleep above; the sources are closed below
         print("\nStopping")
     finally:
-        # Close the sources whatever stopped the loop, so the files and drivers the library opened are released
-        library.joular_close()
+        library.joularcore_close()
 
 
 if __name__ == "__main__":

@@ -16,12 +16,12 @@
  *   make
  *   ./example_c
  *
- * It takes an optional number of readings to take before stopping on its own, which is what makes a run scriptable:
+ * It takes an optional number of readings to take before stopping on its own, for scripted runs:
  *   ./example_c 10
  *
  * Or by hand, against the relocatable (shared) library, from the root of the repository:
  *   gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable
- *   gcc example/c/main.c -Iinclude -Llib/relocatable -lJoular_Core -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
+ *   gcc example/c/main.c -Iinclude -Llib/relocatable -ljoularcore -Wl,-rpath,"$PWD/lib/relocatable" -o example/c/example_c
  *
  * -I is the folder holding joularcore.h, -L and -l the library to link with, and -rpath the folder where the program looks for the library when it runs
  */
@@ -45,8 +45,7 @@
  * volatile sig_atomic_t is the only type a signal handler may safely write */
 static volatile sig_atomic_t stop_asked = 0;
 
-/* Called when Ctrl+C is pressed
- * It only asks the loop to stop: the sources are closed by main, as printing and closing files are not safe to do from a signal handler */
+/* Only sets the flag: printing and closing files are not safe from a signal handler */
 static void on_ctrl_c(int signal_number)
 {
     (void) signal_number;
@@ -54,7 +53,7 @@ static void on_ctrl_c(int signal_number)
 }
 
 /* Prints one measurement with its unit, or n/a when the source has none */
-static void print_measurement(const char *name, const joular_measurement *m)
+static void print_measurement(const char *name, const joularcore_measurement *m)
 {
     if (m->available)
         printf("%s %.2f %s", name, m->value, m->unit == 0 ? "J" : "W");
@@ -62,8 +61,8 @@ static void print_measurement(const char *name, const joular_measurement *m)
         printf("%s n/a", name);
 }
 
-/* How many readings to take before stopping, or zero to run until Ctrl+C
- */
+/* Reads how many readings to take before stopping (zero runs until Ctrl+C) into *wanted
+ * Returns 0 when text is not a whole number of zero or more, 1 otherwise */
 static int wanted_readings(const char *text, long *wanted)
 {
     char *end = NULL;
@@ -79,7 +78,7 @@ static int wanted_readings(const char *text, long *wanted)
 
 int main(int argc, char **argv)
 {
-    joular_reading reading;
+    joularcore_reading reading;
     long wanted = 0;
     long taken = 0;
 
@@ -88,13 +87,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Joular Core %s\n", joular_version());
+    printf("Joular Core %s\n", joularcore_version());
 
-    /* Stop cleanly on Ctrl+C, instead of being killed on the spot */
     signal(SIGINT, on_ctrl_c);
 
-    /* Detect and open every supported hardware source (CPU and GPU) */
-    joular_open(1, 1);
+    joularcore_open(1, 1);
 
     while (!stop_asked) {
         sleep_one_second();
@@ -103,22 +100,19 @@ int main(int argc, char **argv)
         if (stop_asked)
             break;
 
-        /* Take one reading of all the hardware sources opened above */
-        joular_read(&reading);
+        joularcore_read(&reading);
 
         print_measurement("CPU", &reading.cpu);
         printf(" | ");
         print_measurement("GPU", &reading.gpu);
         printf("\n");
 
-        /* Only when a count was asked for, as zero means running until Ctrl+C */
         taken++;
         if (wanted > 0 && taken >= wanted)
             break;
     }
 
-    /* Ctrl+C was pressed, so close the sources opened above */
     printf("Stopping\n");
-    joular_close();
+    joularcore_close();
     return 0;
 }
