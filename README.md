@@ -183,7 +183,7 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 - Others report **power**: the watts being drawn when read (Raspberry Pi models, GPUs).
 - A source that is not present, not supported, or not accessible is reported as **not available**, which will not prevent other sources from working (i.e., CPU not available but GPU is available, the library will continue working as this is not an error).
 - A source that was available but stops answering reports a value of **zero**.
-- On macOS, the value is the **average power over the last sample window**, which powermetrics takes once a second. Reading more often than that hands back the same window again rather than a new measurement, and a window is dropped once it is a few seconds old. Reading less often than every few seconds restarts powermetrics, so that reading waits about a second for a new sample. Opening the sources waits for a first whole sample, so it takes about a second there.
+- On macOS, the value is the **average power since the previous reading**: we ask powermetrics for a sample at each reading. Opening the sources waits for its first sample. If powermetrics stops answering, its sources read zero, and it is started again around ten seconds later.
 - The library is **not thread safe**: call open, read and close from a single thread, as one monitoring loop is the intended use for the current version.
 
 ### What each source actually measures

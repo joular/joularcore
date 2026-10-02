@@ -24,18 +24,31 @@ package body Joular_Core.Powermetrics is
     -- The macOS tool reporting the power of the chip, given by its full path so that PATH cannot point at another program
     Tool : constant String := "/usr/bin/powermetrics";
 
-    -- Time powermetrics waits between two samples, in milliseconds
-    Sample_Interval : constant String := "1000";
-
     -- Enough for one whole sample; older output is discarded
     Output_Buffer_Size : constant := 8192;
 
-    -- How long to wait for the first sample, in milliseconds (one interval, plus margin)
-    First_Sample_Timeout : constant := 3000;
+    -- "take an immediate sample": each reading asks powermetrics for one, instead of it sampling on its own
+    SIGINFO : constant := 29;
 
-    -- How long a reading waits for a sample powermetrics already wrote, in milliseconds
+    -- powermetrics still samples on its own this often, in milliseconds: that write is what ends an orphaned one (SIGPIPE) once its reader is gone
+    Own_Interval : constant String := "600000";
+
+    -- How long a reading waits for the sample it asked for, in milliseconds (powermetrics answers within a few)
+    Sample_Timeout : constant := 1000;
+
+    -- A request made before powermetrics is ready is dropped, so Start asks again this often, in milliseconds
+    Ask_Again : constant := 250;
+    First_Sample_Tries : constant := 12;
+
+    -- How long a reading looks for output already written before asking for its sample, in milliseconds
     -- GNAT.Expect documents a timeout of zero as unpredictable, hence this small value instead
     Drain_Timeout : constant := 10;
+
+    -- After a failure, how long before powermetrics is started again, so a broken one does not hold up every reading
+    Retry_After : constant Time_Span := Seconds (10);
+
+    -- Time between two readings that share one sample: the CPU and the GPU are read one after the other
+    Reuse_Within : constant Time_Span := Milliseconds (100);
 
     -- e.g. "CPU Power: 1234 mW", anchored so "Combined Power (CPU + GPU + ANE)" and "ANE Power" never match
     -- The unit is captured too, as some versions of powermetrics report watts
@@ -47,12 +60,6 @@ package body Joular_Core.Powermetrics is
     Intel_Power_Line : constant Pattern_Matcher :=
         Compile ("^ *(Intel) energy model derived package power \(CPUs\+GT\+SA\): +([0-9.]+) *(m?W)", Multiple_Lines);
 
-    -- No new sample for this long means powermetrics stopped
-    Stale_After : constant Time_Span := Milliseconds (3_500);
-
-    -- Time between two readings that justifies using the old one
-    Reuse_Within : constant Time_Span := Milliseconds (100);
-
     Process : Process_Descriptor;
 
     Running : Boolean := False;
@@ -60,15 +67,15 @@ package body Joular_Core.Powermetrics is
     -- Sources still using the process
     In_Use : Source_List := (others => False);
 
-    -- Power of the last whole sample, in watts, and the moment it was put together
+    -- Power of the last whole sample, in watts, and when it arrived
     Watts : array (Source) of Long_Float := (others => 0.0);
-    Sample_Time : Time := Time_First;
+    Asked : Time := Time_First;
 
     Pending_CPU : Long_Float := 0.0;
     Pending_CPU_Seen : Boolean := False;
 
-    -- When the output was last drained, so reading the two sources one after the other does not drain it twice
-    Last_Drain : Time := Time_First;
+    -- Readings do not start powermetrics again before this moment after a failure (Open always tries)
+    Retry_At : Time := Time_First;
 
     --------------------------------------------------
 
@@ -121,17 +128,22 @@ package body Joular_Core.Powermetrics is
         Running := False;
 
         Watts := (others => 0.0);
-        Sample_Time := Time_First;
-
-        Pending_CPU := 0.0;
         Pending_CPU_Seen := False;
-
-        Last_Drain := Time_First;
     end Stop;
 
     --------------------------------------------------
 
-    -- Stores one matched power line; False when its value is not a number
+    -- Gives up on powermetrics for a while: its sources read zero until it is started again
+    procedure Give_Up is
+    begin
+        Stop;
+        Retry_At := Clock + Retry_After;
+    end Give_Up;
+
+    --------------------------------------------------
+
+    -- Stores one matched power line; True when it completes a whole sample
+    -- Only a CPU line followed by its GPU line counts, so both values come from one sample; Mac Intel have one line
     function Store (Output : in String; Matched : in Match_Array) return Boolean is
         Name : constant String := Output (Matched (1).First .. Matched (1).Last);
         Unit : constant String := Output (Matched (3).First .. Matched (3).Last);
@@ -144,52 +156,72 @@ package body Joular_Core.Powermetrics is
             Value := Value / 1000.0;
         end if;
 
-        -- Publish only a CPU line followed by its GPU line, so both values come from one sample
-        -- Mac Intel have no GPU line, so their one line is the sample
         if Name = "Intel" then
             Watts := (CPU => Value, GPU => 0.0);
-            Sample_Time := Clock;
+            return True;
         elsif Name = "CPU" then
             Pending_CPU := Value;
             Pending_CPU_Seen := True;
         elsif Pending_CPU_Seen then
             Watts := (CPU => Pending_CPU, GPU => Value);
-            Sample_Time := Clock;
-
             Pending_CPU_Seen := False;
+            return True;
         end if;
 
-        return True;
+        return False;
     exception
         when others =>
+            -- Not a number: the line is skipped
             return False;
     end Store;
 
     --------------------------------------------------
 
-    function Sample_Is_Fresh return Boolean is
+    -- Asks powermetrics for a sample and waits for it, whole, until Deadline
+    -- What it already wrote (a sample of its own, a late answer) is read first, so the sample kept is the one asked for
+    function Ask (Deadline : in Time) return Boolean is
+        Result : Expect_Match;
+        Matched : Match_Array (0 .. 3);
+        Ignored : Boolean;
     begin
-        return Running
-               and then Sample_Time /= Time_First
-               and then Clock - Sample_Time <= Stale_After;
-    end Sample_Is_Fresh;
+        loop
+            Expect (Process, Result, Chip_Line, Matched, Timeout => Drain_Timeout);
+
+            exit when Result = Expect_Timeout;
+
+            Ignored := Store (Expect_Out (Process), Matched);
+        end loop;
+
+        Send_Signal (Process, SIGINFO);
+
+        loop
+            Expect (Process, Result, Chip_Line, Matched,
+                    Timeout => Integer'Max (1, Integer (Float (To_Duration (Deadline - Clock)) * 1000.0)));
+
+            if Result = Expect_Timeout then
+                -- GNAT's Expect gives up early once less than half a second is left, so wait on until Deadline
+                exit when Clock >= Deadline;
+            elsif Store (Expect_Out (Process), Matched) then
+                return True;
+            end if;
+        end loop;
+
+        return False;
+    end Ask;
 
     --------------------------------------------------
 
-    -- Spawns powermetrics and waits for its first sample
-    -- False when it cannot run or gives nothing in time
-    function Start return Boolean is
+    -- Spawns powermetrics and waits for its first sample.
+    -- Running says whether it answered
+    procedure Start is
         Arguments : GNAT.OS_Lib.Argument_List :=
             (new String'("--samplers"), new String'(if Apple_Silicon then "cpu_power,gpu_power" else "cpu_power"),
-             new String'("-i"), new String'(Sample_Interval),
-             -- Unbuffered, so a reading gets the sample of the moment
+             -- Each reading asks for a sample, which then covers the time since the previous one
+             new String'("-i"), new String'(Own_Interval),
+             -- Unbuffered, so a reading gets the sample it asked for
              new String'("-b"), new String'("0"),
              -- Shorter output to read through
              new String'("--hide-cpu-duty-cycle"));
-
-        Result : Expect_Match;
-        Matched : Match_Array (0 .. 3);
-        Deadline : Time;
 
         -- Free sets a String to null and freeing null does nothing, so calling this twice is harmless
         procedure Free_Arguments is
@@ -210,75 +242,45 @@ package body Joular_Core.Powermetrics is
 
         Running := True;
 
-        -- One window back, so the first Update drains rather than reuses, and Clock - Time_First (which overflows) is never computed
-        Last_Drain := Clock - Reuse_Within;
-
-        -- The sources are only reported available once powermetrics answers for both
-        Deadline := Clock + Milliseconds (First_Sample_Timeout);
-
-        while Clock < Deadline loop
-            Expect (Process, Result, Chip_Line, Matched,
-                    Timeout => Integer'Max (1, Integer (Float (To_Duration (Deadline - Clock)) * 1000.0)));
-
-            exit when Result = Expect_Timeout or else Matched (0) = No_Match;
-
-            if not Store (Expect_Out (Process), Matched) then
-                Stop;
-                return False;
-            end if;
-
-            if Sample_Time /= Time_First then
-                return True;
+        for Try in 1 .. First_Sample_Tries loop
+            if Ask (Clock + Milliseconds (Ask_Again)) then
+                Asked := Clock;
+                return;
             end if;
         end loop;
 
-        Stop;
-        return False;
+        Give_Up;
     exception
         when others =>
             Free_Arguments;
-            Stop;
-            return False;
+            Give_Up;
     end Start;
 
     --------------------------------------------------
 
-    -- Drains what powermetrics wrote since the last call, keeping the last whole sample
+    -- Gets the sample of this reading, unless the one just asked for serves it
+    -- After a failure, starts powermetrics again once Retry_At has passed
     procedure Update is
-        Result : Expect_Match;
-        Matched : Match_Array (0 .. 3);
-        Ignored : Boolean;
     begin
-        if not Running then
-            return;
-        end if;
-
-        if Clock - Last_Drain < Reuse_Within then
-            return;
-        end if;
-
-        -- After a long gap the pipe filled and powermetrics stalled on it, so restart for a fresh sample
-        if Clock - Last_Drain > Stale_After then
-            Stop;
-
-            if not Start then
+        if Running then
+            -- abs: Ada.Real_Time.Clock follows the wall clock on macOS, which may be set back
+            if abs (Clock - Asked) < Reuse_Within then
                 return;
             end if;
+
+            if Ask (Clock + Milliseconds (Sample_Timeout)) then
+                Asked := Clock;
+            else
+                Give_Up;
+            end if;
+        elsif Clock >= Retry_At then
+            -- Its first sample serves this reading
+            Start;
         end if;
-
-        Last_Drain := Clock;
-
-        loop
-            Expect (Process, Result, Chip_Line, Matched, Timeout => Drain_Timeout);
-
-            exit when Result = Expect_Timeout or else Matched (0) = No_Match;
-
-            Ignored := Store (Expect_Out (Process), Matched);
-        end loop;
     exception
         when others =>
-            -- The process died or its pipe broke; its sources read zero from now on
-            Stop;
+            -- The process died or its pipe broke
+            Give_Up;
     end Update;
 
     --------------------------------------------------
@@ -291,7 +293,13 @@ package body Joular_Core.Powermetrics is
         end if;
 
         if not Running then
-            if not Is_Root or else not Start then
+            if not Is_Root then
+                return False;
+            end if;
+
+            Start;
+
+            if not Running then
                 return False;
             end if;
         end if;
@@ -306,10 +314,7 @@ package body Joular_Core.Powermetrics is
     begin
         Update;
 
-        if not Sample_Is_Fresh then
-            return 0.0;
-        end if;
-
+        -- Zero once Stop gave up on the process
         return Watts (Item);
     end Get_Power;
 
