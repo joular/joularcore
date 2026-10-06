@@ -52,7 +52,7 @@ library project Joularcore is
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
     end case;
 
-    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows, to read the RAPL registers)
+    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows and BSD, to read the RAPL registers)
     -- Override with: gprbuild -XPJ_X86=False
     Default_X86 := "False";
     case Host_Target is

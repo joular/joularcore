@@ -9,26 +9,28 @@
 --  Author : Adel Noureddine
 --
 
--- BSD: no CPU is supported yet
+with Joular_Core.RAPL_CPUCTL;
+
+-- BSD: RAPL through cpuctl (Intel and AMD, on FreeBSD and DragonFly); OpenBSD and NetBSD give no way to read the registers
 package body Joular_Core.CPU_Monitor is
 
     function Open return Boolean is
     begin
-        return False;
+        return RAPL_CPUCTL.Open;
     end Open;
 
     --------------------------------------------------
 
     function Read return Measurement is
     begin
-        return (others => <>);
+        return (Available => True, Value => RAPL_CPUCTL.Get_Energy, Unit => Energy);
     end Read;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        null;
+        RAPL_CPUCTL.Close;
     end Close;
 
 end Joular_Core.CPU_Monitor;
