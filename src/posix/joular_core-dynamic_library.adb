@@ -11,7 +11,7 @@
 
 with Interfaces.C; use Interfaces.C;
 
--- Linux, macOS and BSD
+-- Linux, macOS and FreeBSD
 package body Joular_Core.Dynamic_Library is
 
     -- Resolve every symbol at load, so a library missing one fails in dlopen rather than on a later call

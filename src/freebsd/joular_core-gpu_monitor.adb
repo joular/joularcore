@@ -11,7 +11,7 @@
 
 with Joular_Core.GPU_Nvidia_NVML;
 
--- BSD: Nvidia cards through NVML
+-- FreeBSD: Nvidia cards through NVML
 package body Joular_Core.GPU_Monitor is
 
     function Open return Boolean is

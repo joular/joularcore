@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
--- Ask the processor about itself (with the CPUID instruction), to know which RAPL registers to read on Windows and BSD
+-- Ask the processor about itself (with the CPUID instruction), to know which RAPL registers to read on Windows and FreeBSD
 -- CPUID only exists on x86 processors, so on others (e.g. ARM), the vendor is not known and no register is read
 private package Joular_Core.Processor is
 

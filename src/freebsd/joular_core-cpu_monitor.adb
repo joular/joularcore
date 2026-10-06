@@ -11,7 +11,7 @@
 
 with Joular_Core.RAPL_CPUCTL;
 
--- BSD: RAPL through cpuctl (Intel and AMD, on FreeBSD and DragonFly); OpenBSD and NetBSD give no way to read the registers
+-- FreeBSD: RAPL through cpuctl (Intel and AMD)
 package body Joular_Core.CPU_Monitor is
 
     function Open return Boolean is

@@ -10,7 +10,7 @@
 --
 
 -- Read the power consumption of an Nvidia GPU through NVML
--- Requires the Nvidia driver, on Linux, Windows or BSD
+-- Requires the Nvidia driver, on Linux, Windows or FreeBSD
 private package Joular_Core.GPU_Nvidia_NVML is
 
     -- Load NVML, start it and take one reading of the first card

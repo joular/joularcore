@@ -39,9 +39,9 @@ jobs:
           alr exec -- make -C example/c
 
       # Own object folders, so the objects of the library built above are not replaced
-      - name: Compile-check the BSD branch (Linux)
+      - name: Compile-check the FreeBSD branch (Linux)
         if: runner.os == 'Linux'
-        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=bsd -f -c --subdirs=check-bsd
+        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=freebsd -f -c --subdirs=check-freebsd
 
       # The Windows branch uses CPUID, which only compiles on x86; the Linux runner is x86
       - name: Compile-check the Windows branch (Linux, x86)

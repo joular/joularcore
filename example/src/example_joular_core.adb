@@ -10,7 +10,7 @@
 --
 
 --  Prints the energy and power consumed by the CPU and the GPU every second, until stopped with Ctrl+C
---  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL through Windows' Energy Meter Interface or through the MSR registers), macOS (Apple Silicon and Intel Macs through powermetrics), FreeBSD and DragonFly (RAPL through cpuctl), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
+--  Works on Linux (Intel/AMD RAPL, Raspberry Pi models), Windows (RAPL through Windows' Energy Meter Interface or through the MSR registers), macOS (Apple Silicon and Intel Macs through powermetrics), FreeBSD (RAPL through cpuctl), and with Nvidia (NVML) and AMD (sysfs, ADLX) GPUs
 --
 --  On Windows the RAPL counter is reached in one of three ways, and naming one on the command line tries that one alone:
 --      example_joular_core emi
@@ -180,8 +180,7 @@ procedure Example_Joular_Core is
         Put_Line ("The RAPL counter in /sys/class/powercap/intel-rapl is only readable by root on most distributions, so run this with sudo");
         Put_Line ("Raspberry Pi and other supported boards have no counter, and are read from a model of the board named in /proc/device-tree/model");
 #else
-        Put_Line ("FreeBSD and DragonFly read the RAPL counter from the processor's registers through /dev/cpuctl0, so load that driver (kldload cpuctl) and run this as root or in the kmem group");
-        Put_Line ("OpenBSD and NetBSD give no way to read the registers, so the CPU cannot be measured there");
+        Put_Line ("FreeBSD reads the RAPL counter from the processor's registers through /dev/cpuctl0, so load that driver (kldload cpuctl) and run this as root or in the kmem group");
 #end if;
     end Put_CPU_Hint;
 

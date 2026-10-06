@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
--- Linux and BSD, where the versioned name is the one always present
+-- Linux and FreeBSD, where the versioned name is the one always present
 separate (Joular_Core.GPU_Nvidia_NVML)
 function Load_Library return System.Address is
     Library : constant System.Address := Load ("libnvidia-ml.so.1");

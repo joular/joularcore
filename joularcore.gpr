@@ -6,7 +6,7 @@ library project Joularcore is
     Host_OS := external ("OS", "");
     Default_OS := "linux";
 
-    -- The names are the canonical ones of gprconfig (OpenBSD has none, so build there with -XPJ_OS=bsd)
+    -- The names are the canonical ones of gprconfig
     case Host_Target is
         when "x86_64-windows" | "x86-windows"
             => Default_OS := "windows";
@@ -14,9 +14,8 @@ library project Joularcore is
             => Default_OS := "macos";
         when "x86_64-linux" | "aarch64-linux" | "arm-linux" | "armhf-linux" | "x86-linux"
             => Default_OS := "linux";
-        when "x86_64-freebsd" | "aarch64-freebsd" | "x86-freebsd"
-           | "x86_64-netbsd" | "aarch64-netbsd" | "x86_64-dragonfly"
-            => Default_OS := "bsd";
+        when "x86_64-freebsd" | "aarch64-freebsd"
+            => Default_OS := "freebsd";
         when others =>
             -- A name not listed above: Windows says so in its environment, anything else is taken as Linux
             case Host_OS is
@@ -25,11 +24,11 @@ library project Joularcore is
             end case;
     end case;
 
-    type OS_Platform is ("linux", "windows", "macos", "bsd");
+    type OS_Platform is ("linux", "windows", "macos", "freebsd");
     PJ_OS : OS_Platform := external ("PJ_OS", Default_OS);
 
     -- Code shared by every OS is in src, the code of one OS in its own folder
-    -- src/posix holds shared code for Linux, macOS and BSD
+    -- src/posix holds shared code for Linux, macOS and FreeBSD
     -- The symbols in Defines let the example program print what applies to the OS it was built for
     Defines := ();
 
@@ -37,27 +36,27 @@ library project Joularcore is
         when "linux" =>
             for Source_Dirs use ("src", "src/posix", "src/linux");
             Defines := ("-gnateDPJ_LINUX=True", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "windows" =>
             for Source_Dirs use ("src", "src/windows");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=True",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "macos" =>
             for Source_Dirs use ("src", "src/posix", "src/macos");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=True", "-gnateDPJ_BSD=False");
-        when "bsd" =>
-            for Source_Dirs use ("src", "src/posix", "src/bsd");
+                        "-gnateDPJ_MACOS=True", "-gnateDPJ_FREEBSD=False");
+        when "freebsd" =>
+            for Source_Dirs use ("src", "src/posix", "src/freebsd");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=True");
     end case;
 
-    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows and BSD, to read the RAPL registers)
+    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows and FreeBSD, to read the RAPL registers)
     -- Override with: gprbuild -XPJ_X86=False
     Default_X86 := "False";
     case Host_Target is
         when "x86_64-windows" | "x86_64-darwin" | "x86_64-linux"
-           | "x86_64-freebsd" | "x86_64-netbsd" | "x86_64-dragonfly"
+           | "x86_64-freebsd"
             => Default_X86 := "True";
         when others
             => Default_X86 := "False";
@@ -103,7 +102,7 @@ library project Joularcore is
 
             -- The number is the ABI: bump it only when the C interface changes in an incompatible way
             case PJ_OS is
-                when "linux" | "bsd" =>
+                when "linux" | "freebsd" =>
                     for Library_Version use "libjoularcore.so.0";
                 when others =>
                     null;

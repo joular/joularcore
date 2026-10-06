@@ -13,7 +13,7 @@ with System;
 
 -- Load a shared library (instead of linking to it)
 -- The libraries are installed with the drivers of the GPU card (NVML for Nvidia, ADLX for AMD)
--- The body is in src/posix (dlopen) for Linux, macOS and BSD, and in src/windows (LoadLibraryEx) for Windows
+-- The body is in src/posix (dlopen) for Linux, macOS and FreeBSD, and in src/windows (LoadLibraryEx) for Windows
 private package Joular_Core.Dynamic_Library is
 
     -- Load the shared library, from its name or its full path

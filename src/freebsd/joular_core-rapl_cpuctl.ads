@@ -9,7 +9,7 @@
 --  Author : Adel Noureddine
 --
 
--- RAPL energy counter of the PKG domain of the first socket, read from the registers of the processor through cpuctl(4): FreeBSD and DragonFly
+-- RAPL energy counter of the PKG domain of the first socket, read from the registers of the processor through cpuctl(4)
 -- Needs the cpuctl driver loaded (kldload cpuctl), and root or the kmem group, which the device belongs to
 private package Joular_Core.RAPL_CPUCTL is
 
