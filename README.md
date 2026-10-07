@@ -69,6 +69,8 @@ Or directly with GNAT:
 gprbuild -P joularcore.gpr
 ```
 
+On FreeBSD, build with GNAT 15 or newer: `pkg install gprbuild gnat15`, then add `/usr/local/gnat15/bin` to `PATH`. GNAT 12, which `pkg install gprbuild` uses, crashes on the code reading `cpuctl`, and ignores the pragma that keeps the shared library away from the signal handlers of the program loading it. Alire takes the GNAT in `PATH` there too, and refuses an older one.
+
 The build produces a static library by default, and detects the OS on its own to compile the appropriate version: Linux, Windows, macOS and FreeBSD are each recognised from the target gprbuild reports.
 `-XPJ_OS` overrides it when the version to build is not the one of the machine building it (e.g. `-XPJ_OS=windows`).
 
@@ -200,7 +202,7 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 | Raspberry Pi | A model-based estimate: a regression on CPU load, evaluated over the interval between two readings. It is not a reading of the board's actual draw |
 | Nvidia (NVML) | What the card reports for the whole GPU board. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
 | AMD on Linux (hwmon) | Whole GPU board power, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
-| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is choosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
+| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is chosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
 | macOS | Apple Silicon: the CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them. Intel Macs: the whole chip (cores, integrated GPU and system agent), like the RAPL package on Linux and Windows |
 
 RAPL counters wrap when they fill, and the library corrects that. The correction only works if less energy was used between two readings than the counter holds. How long the counter takes to fill depends on the energy unit of the processor.

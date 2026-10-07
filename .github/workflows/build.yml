@@ -38,11 +38,7 @@ jobs:
           choco install make --no-progress -y
           alr exec -- make -C example/c
 
-      # Own object folders, so the objects of the library built above are not replaced
-      - name: Compile-check the FreeBSD branch (Linux)
-        if: runner.os == 'Linux'
-        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=freebsd -f -c --subdirs=check-freebsd
-
+      # Own object folder, so the objects of the library built above are not replaced
       # The Windows branch uses CPUID, which only compiles on x86; the Linux runner is x86
       - name: Compile-check the Windows branch (Linux, x86)
         if: runner.os == 'Linux'
@@ -67,3 +63,27 @@ jobs:
         if: runner.os == 'Linux'
         # Checks the pinned SHA-256 of tools/pawnio/*.bin, then that the committed package matches what they produce
         run: python3 tools/gen_pawnio_modules.py --check
+
+  # FreeBSD, in a virtual machine as GitHub has no FreeBSD runners
+  # GNAT 15 at least: GNAT 12, which gprbuild brings along, crashes on the cpuctl code and ignores pragma Interrupts_System_By_Default
+  # Nothing tells the build it is on FreeBSD: it finds out on its own, as it does for anyone building there
+  # The virtual machine has no RAPL, so the examples report the CPU as not available
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # gmake, as the Makefile of the C example is written for GNU make
+      - name: Build and run the examples in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14"
+          prepare: pkg install -y gprbuild gnat15 gmake
+          run: |
+            export PATH=/usr/local/gnat15/bin:$PATH
+            gprbuild -P joularcore.gpr -p
+            gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable -p
+            gprbuild -P example/example.gpr -p
+            gmake -C example/c
+            ./example/example_joular_core 3
+            ./example/c/example_c 3
