@@ -96,6 +96,10 @@ library project Joularcore is
                     -- The specs file records that folder instead, so the library finds the runtime without DYLD_LIBRARY_PATH
                     for Run_Path_Option use ();
                     for Library_Options use ("-specs=" & project'Project_Dir & "src/macos/ada_runtime_rpath.specs");
+                when "freebsd" =>
+                    for Library_Standalone use "encapsulated";
+                    -- Ada.Real_Time (the energy counters) brings the tasking runtime, which needs libpthread: separate from libc on FreeBSD
+                    for Library_Options use ("-lpthread");
                 when others =>
                     for Library_Standalone use "encapsulated";
             end case;
