@@ -18,7 +18,7 @@ jobs:
       - uses: alire-project/setup-alire@v6
 
       - name: Build the static library
-        run: alr build
+        run: alr --non-interactive build
 
       - name: Build the relocatable (shared) library
         run: alr exec -- gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable -p
@@ -38,12 +38,6 @@ jobs:
           choco install make --no-progress -y
           alr exec -- make -C example/c
 
-      # Own object folder, so the objects of the library built above are not replaced
-      # The Windows branch uses CPUID, which only compiles on x86; the Linux runner is x86
-      - name: Compile-check the Windows branch (Linux, x86)
-        if: runner.os == 'Linux'
-        run: alr exec -- gprbuild -P joularcore.gpr -XPJ_OS=windows -XPJ_X86=True -f -c --subdirs=check-windows
-
       - name: Run the examples for a few readings
         shell: bash
         run: |
@@ -51,7 +45,6 @@ jobs:
           ./example/c/example_c 3
 
       - name: Check the version in the code matches the crate
-        if: runner.os == 'Linux'
         shell: bash
         run: |
           crate=$(grep -m1 '^version' alire.toml | cut -d'"' -f2)

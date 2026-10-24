@@ -13,7 +13,7 @@
 -- https://learn.microsoft.com/en-us/windows-hardware/drivers/powermeter/energy-meter-interface
 -- On Windows 11 the processor driver publishes the RAPL domains as channels of this meter, so it is the same counter the MSR drivers read, handed over by Windows
 -- Nothing to install, no administrator privileges
--- Only the package channel of the first socket is read: it already covers the cores and the integrated graphics
+-- The package channels of every socket are read and added together: each already covers its cores and integrated graphics
 private package Joular_Core.RAPL_EMI_Windows is
 
     -- Find and open a meter publishing the RAPL package counter

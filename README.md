@@ -25,7 +25,7 @@ Detailed documentation (including user and reference guides) is available at: [h
 | GPU | AMD cards | Windows | ADLX (installed with the AMD driver) | Power (watts) |
 | GPU | Apple Silicon | macOS | powermetrics (installed with macOS) | Power (watts) |
 
-For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board.
+For Raspberry Pi, we support these models: 5B, 400, 4B, 3B+, 3B, 2B, 1B+, 1B, Zero W, and Asus Tinker Board. On a 32-bit system there is no model for the 5B and the 400.
 On macOS, Apple Silicon Macs give their CPU and the GPU built in the same chip, both read from powermetrics, one reading each.
 Intel Macs give the CPU only. FreeBSD reads the RAPL counter of Intel and AMD processors.
 
@@ -179,7 +179,7 @@ if r.cpu.available:
 lib.joularcore_close()
 ```
 
-A full example program is in [example/python/main.py](example/python/main.py). Like the C one, it reads once per second until stopped with Ctrl+C, which closes the sources cleanly. It comes with a [Makefile](example/python/Makefile) that builds the shared library.
+A full example program is in [example/python/main.py](example/python/main.py). Like the C one, it reads once per second until stopped with Ctrl+C, which closes the sources cleanly. The Ada runtime in the library may replace Python's Ctrl+C handler when it loads, so the example puts Python's back right after loading. It comes with a [Makefile](example/python/Makefile) that builds the shared library.
 
 Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and every other language with a C FFI work the same way.
 
@@ -196,25 +196,28 @@ Java (through FFM or JNA), Rust (through `libloading` or FFI declarations), and 
 
 | Source | What the number covers |
 |---|---|
-| RAPL on Linux | **One** package of powercap, the first one whose name begins with `package` |
-| RAPL on Windows | The package domain of the first socket |
-| RAPL on FreeBSD | The package domain of the first processor, `/dev/cpuctl0` |
+| RAPL on Linux | Every package domain of powercap (one per socket), added together |
+| RAPL on Windows | The package domain of every socket, added together |
+| RAPL on FreeBSD | The package domain of every socket, added together, read through one `/dev/cpuctl` device per socket |
 | Raspberry Pi | A model-based estimate: a regression on CPU load, evaluated over the interval between two readings. It is not a reading of the board's actual draw |
-| Nvidia (NVML) | What the card reports for the whole GPU board. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
-| AMD on Linux (hwmon) | Whole GPU board power, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
-| AMD on Windows (ADLX) | Whole GPU board power where the card offers it, and the graphics processor alone where it does not. Which of the two is chosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
+| Nvidia (NVML) | What every card reports for its whole board, added together. Depending on the architecture and driver, this is an average over about a second rather than an instant value. |
+| AMD on Linux (hwmon) | Whole board power of every card, added together, not the graphics processor alone. On an APU that includes the CPU cores, so work done on the CPU raises what this library calls the GPU, and adding CPU and GPU together counts some of it twice. |
+| AMD on Windows (ADLX) | Every card, added together: whole board power where a card offers it, and the graphics processor alone where it does not. Which of the two is chosen when the card is opened and does not change while the program runs, so a series of measurements always means one thing |
 | macOS | Apple Silicon: the CPU and the GPU parts of the same chip, from the same sample, as powermetrics estimates them. Intel Macs: the whole chip (cores, integrated GPU and system agent), like the RAPL package on Linux and Windows |
+
+A machine carrying Nvidia and AMD cards reads both, added together.
 
 RAPL counters wrap when they fill, and the library corrects that. The correction only works if less energy was used between two readings than the counter holds. How long the counter takes to fill depends on the energy unit of the processor.
 The Energy Meter Interface (EMI) on Windows corrects for the wrap by itself, so Joular Core doesn't need to do the correction.
+A reading that would mean more than 1000 W for a package is a counter reset (after a suspend, or a driver glitch), not consumption: it counts zero, and the next reading starts from it.
 
 ## Adding new hardware or a new OS
 
 Each hardware component is one package with three functions: `Open` (detect and open, returning `False` when the hardware is not there or cannot be read), `Get_Power` or `Get_Energy` (one reading, in watts or joules), and `Close`.
 
-The code shared by every OS is in [src](src), and the code of each OS is in its own folder, picked by [joularcore.gpr](joularcore.gpr) from `PJ_OS`: [src/linux](src/linux), [src/windows](src/windows), [src/macos](src/macos) and [src/freebsd](src/freebsd), with [src/posix](src/posix) holding what Linux, macOS and FreeBSD do the same way (loading a shared library). Each OS folder has its own body of the two monitors, `CPU_Monitor` and `GPU_Monitor` (for example [src/linux/joular_core-cpu_monitor.adb](src/linux/joular_core-cpu_monitor.adb)), which lists the packages that can read that hardware on that OS, tries them in order and keeps the first one that answers. To support new hardware, write such a package in the folder of the OS it runs on (or in `src` if it is portable, like [NVML](src/joular_core-gpu_nvidia_nvml.adb)), and add it to the monitor of that OS. To support a new OS, add its folder with its two monitors, and add it to `PJ_OS` in the project file.
+The code shared by every OS is in [src](src), and the code of each OS is in its own folder, picked by [joularcore.gpr](joularcore.gpr) from `PJ_OS`: [src/linux](src/linux), [src/windows](src/windows), [src/macos](src/macos) and [src/freebsd](src/freebsd), with [src/posix](src/posix) holding what Linux, macOS and FreeBSD do the same way (loading a shared library). Each OS folder has its own body of the two monitors, `CPU_Monitor` and `GPU_Monitor` (for example [src/linux/joular_core-cpu_monitor.adb](src/linux/joular_core-cpu_monitor.adb)), which lists the packages that can read that hardware on that OS: the CPU monitor tries them in order and keeps the first one that answers, the GPU monitor opens every one that answers and adds them up. To support new hardware, write such a package in the folder of the OS it runs on (or in `src` if it is portable, like [NVML](src/joular_core-gpu_nvidia_nvml.adb)), and add it to the monitor of that OS. To support a new OS, add its folder with its two monitors, and add it to `PJ_OS` in the project file.
 
-Windows RAPL splits this further, as the same counter is reached in several ways. [RAPL_Windows](src/windows/joular_core-rapl_windows.adb) tries each way in order and keeps the first that answers: [RAPL_EMI_Windows](src/windows/joular_core-rapl_emi_windows.adb), which read RAPL from EMI interface, then [RAPL_MSR_Windows](src/windows/joular_core-rapl_msr_windows.adb), which reads the MSR registers with a driver. That second one keeps the vendor detection and the counter abstract, and hands the reading of a single register to one of two interchangeable packages, [MSR_PawnIO](src/windows/joular_core-msr_pawnio.adb) and [MSR_Hubblo](src/windows/joular_core-msr_hubblo.adb). All of them share the small set of Win32 bindings in [Win32](src/windows/joular_core-win32.ads). Supporting another driver means writing another such package with `Open`, `Read` and `Close`, adding it to `Driver_Kind` in `RAPL_MSR_Windows`, and to the list tried in `RAPL_Windows.Open`. On FreeBSD the same registers are read through the `cpuctl` device, in [RAPL_CPUCTL](src/freebsd/joular_core-rapl_cpuctl.adb). Both ask the processor its vendor with [Processor](src/joular_core-processor.adb), shared by the OSes that read the registers themselves.
+Windows RAPL splits this further, as the same counter is reached in several ways. [RAPL_Windows](src/windows/joular_core-rapl_windows.adb) tries each way in order and keeps the first that answers: [RAPL_EMI_Windows](src/windows/joular_core-rapl_emi_windows.adb), which read RAPL from EMI interface, then [RAPL_MSR_Windows](src/windows/joular_core-rapl_msr_windows.adb), which reads the MSR registers with a driver. That second one keeps the vendor detection and the counter abstract, and hands the reading of a single register to one of two interchangeable packages, [MSR_PawnIO](src/windows/joular_core-msr_pawnio.adb) and [MSR_Hubblo](src/windows/joular_core-msr_hubblo.adb). All of them share the small set of Win32 bindings in [Win32](src/windows/joular_core-win32.ads). Supporting another driver means writing another such package with `Open`, `Read` and `Close`, adding it to `Driver_Kind` in `RAPL_MSR_Windows`, and to the list tried in `RAPL_Windows.Open`. On FreeBSD the same registers are read through the `cpuctl` device, in [RAPL_CPUCTL](src/freebsd/joular_core-rapl_cpuctl.adb). Both ask the processor its vendor and its sockets with [Processor](src/msr/joular_core-processor.adb), and share what the registers hold in [RAPL_MSR](src/msr/joular_core-rapl_msr.adb): [src/msr](src/msr) is compiled only for the OSes that read the registers themselves.
 
 The RAPL counters of Linux, Windows and FreeBSD wrap the same way, so the energy between two readings is shared in [Energy_Counters](src/joular_core-energy_counters.adb).
 

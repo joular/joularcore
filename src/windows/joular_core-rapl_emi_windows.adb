@@ -82,8 +82,7 @@ package body Joular_Core.RAPL_EMI_Windows is
     -- Energy (8 bytes), then timestamp (8 bytes)
     MEASUREMENT_SIZE : constant := 16;
 
-    -- Socket 0 package channel, or else the first *_PKG channel
-    PACKAGE_CHANNEL_NAME : constant String := "RAPL_Package0_PKG";
+    -- The package channels are named RAPL_PackageN_PKG, one per socket
     PACKAGE_CHANNEL_SUFFIX : constant String := "_PKG";
 
     -- Sanity bounds, far above what the Windows 11 meter returns (four channels, about 500 bytes of metadata)
@@ -121,9 +120,13 @@ package body Joular_Core.RAPL_EMI_Windows is
 
     --------------------------------------------------
 
+    -- Where the measurement of each package channel starts
+    type Offset_List is array (1 .. MAX_CHANNELS) of Storage_Offset;
+
     Device_Handle : HANDLE := INVALID_HANDLE_VALUE;
     Channel_Count : Storage_Offset := 0;
-    Channel_Offset : Storage_Offset := 0;
+    Package_Offsets : Offset_List := (others => 0);
+    Package_Count : Natural := 0;
 
     --------------------------------------------------
 
@@ -260,20 +263,20 @@ package body Joular_Core.RAPL_EMI_Windows is
 
     --------------------------------------------------
 
-    -- Returns False if the metadata is malformed or has no package channel
-    function Select_Channel
+    -- Finds the package channels, one per socket; False if the metadata is malformed or has none
+    function Select_Channels
        (Metadata : in Storage_Array;
         Channels : out Storage_Offset;
-        Index : out Storage_Offset) return Boolean
+        Offsets : out Offset_List;
+        Found : out Natural) return Boolean
     is
         Count : constant Storage_Offset := Storage_Offset (Read_Unsigned (Metadata, CHANNEL_COUNT_OFFSET, 2));
         Offset : Storage_Offset := METADATA_HEADER_SIZE;
         Name_Size : Storage_Offset;
-        Exact : Storage_Offset := -1; -- Exact name match
-        Suffix : Storage_Offset := -1; -- First *_PKG match
     begin
         Channels := 0;
-        Index := 0;
+        Offsets := (others => 0);
+        Found := 0;
 
         if Count not in 1 .. MAX_CHANNELS then
             return False;
@@ -297,27 +300,22 @@ package body Joular_Core.RAPL_EMI_Windows is
             declare
                 Name : constant String := Channel_Name (Metadata, Offset + CHANNEL_HEADER_SIZE, Name_Size);
             begin
-                if Name = PACKAGE_CHANNEL_NAME then
-                    Exact := Position;
-                elsif Suffix < 0 and then Ends_With (Name, PACKAGE_CHANNEL_SUFFIX) then
-                    Suffix := Position;
+                if Ends_With (Name, PACKAGE_CHANNEL_SUFFIX) then
+                    Found := Found + 1;
+                    Offsets (Found) := Position * MEASUREMENT_SIZE;
                 end if;
             end;
 
             Offset := Offset + CHANNEL_HEADER_SIZE + Name_Size;
         end loop;
 
-        if Exact >= 0 then
-            Index := Exact;
-        elsif Suffix >= 0 then
-            Index := Suffix;
-        else
+        if Found = 0 then
             return False;
         end if;
 
         Channels := Count;
         return True;
-    end Select_Channel;
+    end Select_Channels;
 
     --------------------------------------------------
 
@@ -325,14 +323,16 @@ package body Joular_Core.RAPL_EMI_Windows is
     function Examine
        (Device : in HANDLE;
         Channels : out Storage_Offset;
-        Offset : out Storage_Offset) return Boolean
+        Offsets : out Offset_List;
+        Found : out Natural) return Boolean
     is
         Version : aliased Unsigned_16 := 0;
         Metadata_Size : aliased Unsigned_32 := 0;
         Returned : DWORD;
     begin
         Channels := 0;
-        Offset := 0;
+        Offsets := (others => 0);
+        Found := 0;
 
         if not Control (Device, IOCTL_EMI_GET_VERSION, Version'Address, 2, Returned)
           or else Returned /= 2
@@ -351,7 +351,6 @@ package body Joular_Core.RAPL_EMI_Windows is
 
         declare
             Metadata : Storage_Array (1 .. Storage_Offset (Metadata_Size)) := (others => 0);
-            Found : Storage_Offset;
             Counter : Unsigned_64;
         begin
             if not Control (Device, IOCTL_EMI_GET_METADATA, Metadata'Address, DWORD (Metadata_Size), Returned)
@@ -360,17 +359,15 @@ package body Joular_Core.RAPL_EMI_Windows is
                 return False;
             end if;
 
-            if not Select_Channel (Metadata, Channels, Found) then
+            if not Select_Channels (Metadata, Channels, Offsets, Found) then
                 Channels := 0;
                 return False;
             end if;
 
-            Offset := Found * MEASUREMENT_SIZE;
-
-            -- Reject a meter that reads zero
-            if not Read_Channel (Device, Channels, Offset, Counter) or else Counter = 0 then
+            -- Reject a meter whose first package reads zero
+            if not Read_Channel (Device, Channels, Offsets (1), Counter) or else Counter = 0 then
                 Channels := 0;
-                Offset := 0;
+                Found := 0;
                 return False;
             end if;
 
@@ -384,7 +381,8 @@ package body Joular_Core.RAPL_EMI_Windows is
     function Try_Device (Path : in System.Address) return Boolean is
         Device : HANDLE;
         Channels : Storage_Offset := 0;
-        Offset : Storage_Offset := 0;
+        Offsets : Offset_List;
+        Found : Natural := 0;
         Kept : Boolean := False;
         Ignored : BOOL;
     begin
@@ -402,7 +400,7 @@ package body Joular_Core.RAPL_EMI_Windows is
         end if;
 
         begin
-            Kept := Examine (Device, Channels, Offset);
+            Kept := Examine (Device, Channels, Offsets, Found);
         exception
             when others =>
                 Kept := False;
@@ -415,7 +413,8 @@ package body Joular_Core.RAPL_EMI_Windows is
 
         Device_Handle := Device;
         Channel_Count := Channels;
-        Channel_Offset := Offset;
+        Package_Offsets := Offsets;
+        Package_Count := Found;
         return True;
     end Try_Device;
 
@@ -541,18 +540,24 @@ package body Joular_Core.RAPL_EMI_Windows is
 
     function Read_Counter return Long_Long_Integer is
         Raw : Unsigned_64;
+        Total : Long_Long_Integer := 0;
     begin
         if Device_Handle = INVALID_HANDLE_VALUE or else Channel_Count = 0 then
             return 0;
         end if;
 
-        if not Read_Channel (Device_Handle, Channel_Count, Channel_Offset, Raw) then
-            return 0;
-        end if;
+        -- The packages added together; one that can't be read makes the whole reading unusable
+        for Offset of Package_Offsets (1 .. Package_Count) loop
+            if not Read_Channel (Device_Handle, Channel_Count, Offset, Raw) then
+                return 0;
+            end if;
 
-        -- 1 pWh = 9/2500 uJ, split so Raw * 9 cannot overflow
-        return Long_Long_Integer (Raw / 2500) * 9
-               + Long_Long_Integer ((Raw mod 2500) * 9 / 2500);
+            -- 1 pWh = 9/2500 uJ, split so Raw * 9 cannot overflow
+            Total := Total + Long_Long_Integer (Raw / 2500) * 9
+                     + Long_Long_Integer ((Raw mod 2500) * 9 / 2500);
+        end loop;
+
+        return Total;
     end Read_Counter;
 
     --------------------------------------------------
@@ -566,7 +571,8 @@ package body Joular_Core.RAPL_EMI_Windows is
         end if;
 
         Channel_Count := 0;
-        Channel_Offset := 0;
+        Package_Offsets := (others => 0);
+        Package_Count := 0;
     end Close;
 
 end Joular_Core.RAPL_EMI_Windows;

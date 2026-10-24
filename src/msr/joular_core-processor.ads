@@ -9,8 +9,9 @@
 --  Author : Adel Noureddine
 --
 
--- Ask the processor about itself (with the CPUID instruction), to know which RAPL registers to read on Windows and FreeBSD
--- CPUID only exists on x86 processors, so on others (e.g. ARM), the vendor is not known and no register is read
+with Interfaces;
+
+-- What the processor says about itself through CPUID, for the OSes reading the RAPL registers themselves (Windows and FreeBSD)
 private package Joular_Core.Processor is
 
     -- The processor vendors with RAPL registers
@@ -22,5 +23,12 @@ private package Joular_Core.Processor is
     -- True on Silvermont/Airmont Atoms (models 37H, 4AH, 4CH, 5AH, 5DH), whose RAPL energy unit is 2^unit uJ instead of 1/2^unit J
     -- Only matters when reading the MSR directly (Linux and EMI cope); False when the processor cannot be asked
     function Has_Unsupported_Energy_Unit return Boolean;
+
+    -- The package (socket) of a processor, from what leaf 0BH subleaf 1 answers on it: EDX is its x2APIC id, EAX bits 4:0 how far to shift it
+    -- Zero when the processor has no such leaf (EBX is zero then), so every processor then looks like one package
+    function Package_Of (EAX, EBX, EDX : in Interfaces.Unsigned_32) return Natural;
+
+    -- The package of the processor running this thread, or zero when it cannot be asked
+    function Package_Here return Natural;
 
 end Joular_Core.Processor;

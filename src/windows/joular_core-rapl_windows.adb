@@ -27,6 +27,7 @@ package body Joular_Core.RAPL_Windows is
 
     Reader : Reader_Kind := None;
 
+    -- The EMI counter; the MSR packages keep their own
     Counter : Energy_Counters.Counter;
 
     --------------------------------------------------
@@ -48,19 +49,6 @@ package body Joular_Core.RAPL_Windows is
 
     --------------------------------------------------
 
-    function Open_MSR (Driver : in Driver_Kind) return Boolean is
-    begin
-        if not RAPL_MSR_Windows.Open (Driver) then
-            return False;
-        end if;
-
-        Reader := MSR;
-        Counter := (Last => RAPL_MSR_Windows.Read_Counter, Wrap_At => RAPL_MSR_Windows.Wrap_At);
-        return True;
-    end Open_MSR;
-
-    --------------------------------------------------
-
     function Open return Boolean is
         Wanted : constant Choice_Kind := Choice;
     begin
@@ -72,15 +60,14 @@ package body Joular_Core.RAPL_Windows is
         if Wanted in Any | Only_EMI and then RAPL_EMI_Windows.Open then
             Reader := EMI;
             -- Windows already unwraps the counter
-            Counter := (Last => RAPL_EMI_Windows.Read_Counter, Wrap_At => 0);
+            Counter := (Last => RAPL_EMI_Windows.Read_Counter, Wrap_At => 0, others => <>);
             return True;
         end if;
 
-        if Wanted in Any | Only_PawnIO and then Open_MSR (PawnIO) then
-            return True;
-        end if;
-
-        if Wanted in Any | Only_Hubblo and then Open_MSR (Hubblo) then
+        if (Wanted in Any | Only_PawnIO and then RAPL_MSR_Windows.Open (PawnIO))
+           or else (Wanted in Any | Only_Hubblo and then RAPL_MSR_Windows.Open (Hubblo))
+        then
+            Reader := MSR;
             return True;
         end if;
 
@@ -95,15 +82,12 @@ package body Joular_Core.RAPL_Windows is
     --------------------------------------------------
 
     function Get_Energy return Long_Float is
-        Reading : Long_Long_Integer;
     begin
         case Reader is
-            when EMI => Reading := RAPL_EMI_Windows.Read_Counter;
-            when MSR => Reading := RAPL_MSR_Windows.Read_Counter;
-            when None => Reading := 0;
+            when EMI => return Energy_Counters.Joules_Since_Last (Counter, RAPL_EMI_Windows.Read_Counter);
+            when MSR => return RAPL_MSR_Windows.Get_Energy;
+            when None => return 0.0;
         end case;
-
-        return Energy_Counters.Joules_Since_Last (Counter, Reading);
     end Get_Energy;
 
     --------------------------------------------------
@@ -114,7 +98,7 @@ package body Joular_Core.RAPL_Windows is
         RAPL_MSR_Windows.Close;
 
         Reader := None;
-        Counter := (others => 0);
+        Counter := (others => <>);
     end Close;
 
 end Joular_Core.RAPL_Windows;

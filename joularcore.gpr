@@ -17,10 +17,10 @@ library project Joularcore is
         when "x86_64-freebsd" | "aarch64-freebsd"
             => Default_OS := "freebsd";
         when others =>
-            -- A name not listed above: Windows says so in its environment, anything else is taken as Linux
+            -- A name not listed above: Windows says so in its environment, anything else stops the build, so pass -XPJ_OS
             case Host_OS is
                 when "Windows_NT" => Default_OS := "windows";
-                when others => null;
+                when others => Default_OS := "";
             end case;
     end case;
 
@@ -28,7 +28,7 @@ library project Joularcore is
     PJ_OS : OS_Platform := external ("PJ_OS", Default_OS);
 
     -- Code shared by every OS is in src, the code of one OS in its own folder
-    -- src/posix holds shared code for Linux, macOS and FreeBSD
+    -- src/posix holds shared code for Linux, macOS and FreeBSD, src/msr what Windows and FreeBSD, reading the RAPL registers themselves, share
     -- The symbols in Defines let the example program print what applies to the OS it was built for
     Defines := ();
 
@@ -38,7 +38,7 @@ library project Joularcore is
             Defines := ("-gnateDPJ_LINUX=True", "-gnateDPJ_WINDOWS=False",
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "windows" =>
-            for Source_Dirs use ("src", "src/windows");
+            for Source_Dirs use ("src", "src/msr", "src/windows");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=True",
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "macos" =>
@@ -46,7 +46,7 @@ library project Joularcore is
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
                         "-gnateDPJ_MACOS=True", "-gnateDPJ_FREEBSD=False");
         when "freebsd" =>
-            for Source_Dirs use ("src", "src/posix", "src/freebsd");
+            for Source_Dirs use ("src", "src/posix", "src/msr", "src/freebsd");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
                         "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=True");
     end case;

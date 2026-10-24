@@ -29,6 +29,7 @@ The C declarations these classes mirror are in include/joularcore.h.
 """
 
 import ctypes
+import signal
 import sys
 import time
 from pathlib import Path
@@ -107,6 +108,10 @@ def load_library():
                            "    gprbuild -P joularcore.gpr -XJOULARCORE_LIBRARY_TYPE=relocatable")
 
         sys.exit("\n".join(message))
+
+    # The Ada runtime in the library may install its own Ctrl+C handler when loaded, replacing Python's
+    # Put Python's back so Ctrl+C raises KeyboardInterrupt
+    signal.signal(signal.SIGINT, signal.default_int_handler)
 
     library.joularcore_open.argtypes = [ctypes.c_int, ctypes.c_int]
     library.joularcore_open.restype = None

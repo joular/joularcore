@@ -27,7 +27,9 @@ package body Joular_Core.GPU_AMD_Sysfs is
 
     Max_Sensors : constant := 64;
 
-    Power_File : Unbounded_String;
+    -- The power file of every card
+    Power_Files : array (1 .. Max_Sensors) of Unbounded_String;
+    Count : Natural := 0;
 
     --------------------------------------------------
 
@@ -55,30 +57,34 @@ package body Joular_Core.GPU_AMD_Sysfs is
             declare
                 Folder : constant String := Hwmon_Path & "/hwmon" & Trim (Natural'Image (Number), Left);
             begin
-                if Read_First_Line (Folder & "/name") = Driver_Name then
-                    Power_File := To_Unbounded_String (Power_File_Of (Folder));
-
-                    exit when Power_File /= Null_Unbounded_String;
+                if Read_First_Line (Folder & "/name") = Driver_Name and then Power_File_Of (Folder) /= "" then
+                    Count := Count + 1;
+                    Power_Files (Count) := To_Unbounded_String (Power_File_Of (Folder));
                 end if;
             end;
         end loop;
 
-        return Power_File /= Null_Unbounded_String;
+        return Count > 0;
     end Open;
 
     --------------------------------------------------
 
     function Get_Power return Long_Float is
+        Watts : Long_Float := 0.0;
     begin
-        -- hwmon reports microwatts; the file reads 0 when the card stops answering
-        return Long_Float (Read_Integer (To_String (Power_File))) / 1_000_000.0;
+        -- hwmon reports microwatts; a file reads 0 when its card stops answering
+        for File of Power_Files (1 .. Count) loop
+            Watts := Watts + Long_Float (Read_Integer (To_String (File))) / 1_000_000.0;
+        end loop;
+
+        return Watts;
     end Get_Power;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        Power_File := Null_Unbounded_String;
+        Count := 0;
     end Close;
 
 end Joular_Core.GPU_AMD_Sysfs;

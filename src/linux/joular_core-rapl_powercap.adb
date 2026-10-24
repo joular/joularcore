@@ -18,13 +18,18 @@ with Joular_Core.File_Utils; use Joular_Core.File_Utils;
 
 package body Joular_Core.RAPL_Powercap is
 
-    -- PKG is usually intel-rapl:0, but on some machines another domain (e.g. psys) comes first
+    -- Each socket is a top-level domain intel-rapl:N named package-N; other domains (e.g. psys) can come first
     Powercap_Path : constant String := "/sys/class/powercap/intel-rapl:";
-    Max_Domains : constant := 8;
+    Max_Domains : constant := 16;
 
-    Energy_File : Unbounded_String;
+    type Domain is
+       record
+           Energy_File : Unbounded_String;
+           Counter : Energy_Counters.Counter;
+       end record;
 
-    Counter : Energy_Counters.Counter;
+    Packages : array (1 .. Max_Domains) of Domain;
+    Count : Natural := 0;
 
     --------------------------------------------------
 
@@ -32,45 +37,47 @@ package body Joular_Core.RAPL_Powercap is
     begin
         Close;
 
-        -- PKG domains are named package-N, the first found is the main socket
         for Number in 0 .. Max_Domains - 1 loop
             declare
-                Domain : constant String := Powercap_Path & Trim (Natural'Image (Number), Left);
+                Folder : constant String := Powercap_Path & Trim (Natural'Image (Number), Left);
+                Item : Domain;
             begin
-                if Index (Read_First_Line (Domain & "/name"), "package") = 1 then
-                    Energy_File := To_Unbounded_String (Domain & "/energy_uj");
-
-                    Counter := (Last => Read_Integer (Domain & "/energy_uj"),
-                                Wrap_At => Read_Integer (Domain & "/max_energy_range_uj"));
+                if Index (Read_First_Line (Folder & "/name"), "package") = 1 then
+                    Item.Energy_File := To_Unbounded_String (Folder & "/energy_uj");
+                    Item.Counter := (Last => Read_Integer (Folder & "/energy_uj"),
+                                     Wrap_At => Read_Integer (Folder & "/max_energy_range_uj"),
+                                     others => <>);
 
                     -- energy_uj reads 0 without root on most systems
                     -- Without a valid max range a wrapped reading could only be dropped
-                    if Counter.Last = 0 or else Counter.Wrap_At <= 0 then
-                        Close;
-                        return False;
+                    if Item.Counter.Last > 0 and then Item.Counter.Wrap_At > 0 then
+                        Count := Count + 1;
+                        Packages (Count) := Item;
                     end if;
-
-                    return True;
                 end if;
             end;
         end loop;
 
-        return False;
+        return Count > 0;
     end Open;
 
     --------------------------------------------------
 
     function Get_Energy return Long_Float is
+        Joules : Long_Float := 0.0;
     begin
-        return Energy_Counters.Joules_Since_Last (Counter, Read_Integer (To_String (Energy_File)));
+        for Item of Packages (1 .. Count) loop
+            Joules := Joules + Energy_Counters.Joules_Since_Last (Item.Counter, Read_Integer (To_String (Item.Energy_File)));
+        end loop;
+
+        return Joules;
     end Get_Energy;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        Energy_File := Null_Unbounded_String;
-        Counter := (others => 0);
+        Count := 0;
     end Close;
 
 end Joular_Core.RAPL_Powercap;

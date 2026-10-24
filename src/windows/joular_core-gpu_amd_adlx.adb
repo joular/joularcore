@@ -97,7 +97,7 @@ package body Joular_Core.GPU_AMD_ADLX is
            Size : System.Address;
            Empty : System.Address;
            List_Begin : Index_Method; -- Begin in the header, a reserved word here
-           List_End : System.Address;
+           List_End : Index_Method; -- End in the header, a reserved word here
            At_Item : System.Address;
            Clear : System.Address;
            Remove_Back : System.Address;
@@ -186,13 +186,20 @@ package body Joular_Core.GPU_AMD_ADLX is
     Perf_Services : aliased System.Address := System.Null_Address;
     GPU_List : aliased System.Address := System.Null_Address;
 
-    Card : aliased System.Address := System.Null_Address;
-
     -- Board is what the card really draws (what NVML reports for Nvidia); Chip alone is a smaller quantity, the fallback
     type Metric_Kind is (None, Board, Chip);
 
-    -- Settled once in Open
-    Metric : Metric_Kind := None;
+    -- One card of the list, with its metric settled once in Open
+    type Card_Reader is
+       record
+           Card : System.Address := System.Null_Address;
+           Metric : Metric_Kind := None;
+       end record;
+
+    Max_Cards : constant := 16;
+
+    Cards : array (1 .. Max_Cards) of Card_Reader;
+    Count : Natural := 0;
 
     --------------------------------------------------
 
@@ -227,8 +234,8 @@ package body Joular_Core.GPU_AMD_ADLX is
 
     --------------------------------------------------
 
-    -- Read one power out of a fresh sample of the card; False when the card does not offer it or would not answer
-    function Sample_Power (Kind : in Metric_Kind; Power : out Long_Float) return Boolean is
+    -- Read one power out of a fresh sample of Card; False when the card does not offer it or would not answer
+    function Sample_Power (Card : in System.Address; Kind : in Metric_Kind; Power : out Long_Float) return Boolean is
         Services : constant Perf_Services_Vtbl_Access := To_Perf_Services_Vtbl (Vtbl_Of (Perf_Services));
         Metrics : aliased System.Address := System.Null_Address;
         Table : GPU_Metrics_Vtbl_Access;
@@ -282,6 +289,8 @@ package body Joular_Core.GPU_AMD_ADLX is
         ADLX_System : aliased System.Address := System.Null_Address;
         System_Table : System_Vtbl_Access;
         List_Table : GPU_List_Vtbl_Access;
+        Card : aliased System.Address := System.Null_Address;
+        Location, Last : unsigned;
         Power : Long_Float;
     begin
         -- So opening twice doesn't load the library twice
@@ -343,23 +352,33 @@ package body Joular_Core.GPU_AMD_ADLX is
         if List_Table = null
            or else List_Table.At_GPUList = null
            or else List_Table.List_Begin = null
+           or else List_Table.List_End = null
         then
             Close;
             return False;
         end if;
 
-        -- The first card of the list is the one read
-        if List_Table.At_GPUList (GPU_List, List_Table.List_Begin (GPU_List), Card'Access) /= ADLX_OK then
-            Close;
-            return False;
-        end if;
+        -- Every card of the list that reports power; its first reading settles its metric: board, else chip
+        Location := List_Table.List_Begin (GPU_List);
+        Last := List_Table.List_End (GPU_List);
 
-        -- The first reading settles the metric: board, else chip, else the card is unusable
-        if Sample_Power (Board, Power) then
-            Metric := Board;
-        elsif Sample_Power (Chip, Power) then
-            Metric := Chip;
-        else
+        while Location < Last and then Count < Max_Cards loop
+            if List_Table.At_GPUList (GPU_List, Location, Card'Access) = ADLX_OK then
+                if Sample_Power (Card, Board, Power) then
+                    Count := Count + 1;
+                    Cards (Count) := (Card, Board);
+                elsif Sample_Power (Card, Chip, Power) then
+                    Count := Count + 1;
+                    Cards (Count) := (Card, Chip);
+                else
+                    Release_Object (Card);
+                end if;
+            end if;
+
+            Location := Location + 1;
+        end loop;
+
+        if Count = 0 then
             Close;
             return False;
         end if;
@@ -375,12 +394,16 @@ package body Joular_Core.GPU_AMD_ADLX is
 
     function Get_Power return Long_Float is
         Power : Long_Float;
+        Watts : Long_Float := 0.0;
     begin
-        if Metric = None or else not Sample_Power (Metric, Power) then
-            return 0.0;
-        end if;
+        -- A card that would not answer counts zero
+        for Item of Cards (1 .. Count) loop
+            if Sample_Power (Item.Card, Item.Metric, Power) then
+                Watts := Watts + Power;
+            end if;
+        end loop;
 
-        return Power;
+        return Watts;
     end Get_Power;
 
     --------------------------------------------------
@@ -388,9 +411,12 @@ package body Joular_Core.GPU_AMD_ADLX is
     procedure Close is
         Ignored : ADLX_RESULT;
     begin
-        Metric := None;
+        for Item of Cards (1 .. Count) loop
+            Release_Object (Item.Card);
+        end loop;
 
-        Release_Object (Card);
+        Count := 0;
+
         Release_Object (GPU_List);
         Release_Object (Perf_Services);
 

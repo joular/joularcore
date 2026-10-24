@@ -192,6 +192,9 @@ package body Joular_Core.Powermetrics is
             Ignored := Store (Expect_Out (Process), Matched);
         end loop;
 
+        -- A CPU line left over from a drained sample must not pair with the GPU line of the one asked for
+        Pending_CPU_Seen := False;
+
         Send_Signal (Process, SIGINFO);
 
         loop

@@ -10,44 +10,51 @@
 --
 
 with Interfaces; use Interfaces;
+with Interfaces.C; use type Interfaces.C.int;
+with System;
 
+with Joular_Core.Energy_Counters;
 with Joular_Core.MSR_Hubblo;
 with Joular_Core.MSR_PawnIO;
 with Joular_Core.PawnIO_Modules;
 with Joular_Core.Processor; use Joular_Core.Processor;
+with Joular_Core.RAPL_MSR; use Joular_Core.RAPL_MSR;
+with Joular_Core.Win32; use Joular_Core.Win32;
 
 package body Joular_Core.RAPL_MSR_Windows is
 
-    -- Registers holding the energy unit and package counters on Intel and AMD
-    MSR_INTEL_RAPL_POWER_UNIT : constant Unsigned_64 := 16#606#;
-    MSR_INTEL_PKG_ENERGY_STATUS : constant Unsigned_64 := 16#611#;
-    MSR_AMD_RAPL_POWER_UNIT : constant Unsigned_64 := 16#C001_0299#;
-    MSR_AMD_PKG_ENERGY_STATUS : constant Unsigned_64 := 16#C001_029B#;
+    -- A driver reads a register on the processor running the thread, so the thread is pinned to one processor of each package
+    Max_Groups : constant := 16; -- Processor groups of up to 64 processors
+    Max_Packages : constant := 16;
 
-    ENERGY_UNIT_BITS : constant Unsigned_64 := 16#1F00#; -- Bits 12:8 of the power unit register hold the energy unit
-    ENERGY_UNIT_SHIFT : constant := 8; -- How far down to shift them
-    ENERGY_COUNTER_BITS : constant Unsigned_64 := 16#FFFF_FFFF#; -- Only the low 32 bits of the energy register hold the counter, the rest is reserved
+    type Package_Reader is
+       record
+           Where : GROUP_AFFINITY := (Mask => 0, Group => 0, Reserved => (others => 0));
+           Id : Natural := 0;
+           Counter : Energy_Counters.Counter;
+       end record;
 
-    --------------------------------------------------
+    Packages : array (1 .. Max_Packages) of Package_Reader;
+    Count : Natural := 0;
 
     Current_Driver : Driver_Kind := PawnIO;
 
     -- Intel or AMD
-    Energy_MSR : Unsigned_64 := 0;
+    Set : Register_Set;
 
-    -- One count is 1/2^Energy_Exponent joules
-    Energy_Exponent : Natural := 0;
+    -- One count is 1/2^Exponent joules
+    Exponent : Natural := 0;
 
     --------------------------------------------------
 
     -- Zero when the driver would not answer
-    function Read_MSR (MSR : in Unsigned_64) return Unsigned_64 is
+    function Read_MSR (MSR : in Unsigned_32) return Unsigned_64 is
         Value : Unsigned_64;
         Read_Done : Boolean;
     begin
         case Current_Driver is
-            when PawnIO => Read_Done := MSR_PawnIO.Read (MSR, Value);
-            when Hubblo => Read_Done := MSR_Hubblo.Read (MSR, Value);
+            when PawnIO => Read_Done := MSR_PawnIO.Read (Unsigned_64 (MSR), Value);
+            when Hubblo => Read_Done := MSR_Hubblo.Read (Unsigned_64 (MSR), Value);
         end case;
 
         return (if Read_Done then Value else 0);
@@ -55,35 +62,55 @@ package body Joular_Core.RAPL_MSR_Windows is
 
     --------------------------------------------------
 
+    -- Pins the thread to the processor Where, keeping where it ran in Previous; False when there is no such processor
+    function Pin (Where : in GROUP_AFFINITY; Previous : access GROUP_AFFINITY) return Boolean is
+        Wanted : aliased GROUP_AFFINITY := Where;
+    begin
+        return SetThreadGroupAffinity (GetCurrentThread, Wanted'Address, Previous.all'Address) /= 0;
+    end Pin;
+
+    --------------------------------------------------
+
+    procedure Unpin (Previous : in GROUP_AFFINITY) is
+        Wanted : aliased GROUP_AFFINITY := Previous;
+        Ignored : BOOL;
+    begin
+        Ignored := SetThreadGroupAffinity (GetCurrentThread, Wanted'Address, System.Null_Address);
+    end Unpin;
+
+    --------------------------------------------------
+
+    -- The counter of one package, in microjoules, read on one of its processors; zero when it can't be
+    function Read_Counter (Item : in Package_Reader) return Long_Long_Integer is
+        Previous : aliased GROUP_AFFINITY;
+        Value : Long_Long_Integer := 0;
+    begin
+        if Pin (Item.Where, Previous'Access) then
+            Value := Microjoules (Read_MSR (Set.Energy_Status), Exponent);
+            Unpin (Previous);
+        end if;
+
+        return Value;
+    end Read_Counter;
+
+    --------------------------------------------------
+
     function Open (Driver : in Driver_Kind) return Boolean is
-        Vendor_Found : constant Vendor_Kind := Vendor;
-        Power_Unit_MSR : Unsigned_64;
         Opened : Boolean;
+        Where : GROUP_AFFINITY := (Mask => 0, Group => 0, Reserved => (others => 0));
+        Previous : aliased GROUP_AFFINITY;
+        Id : Natural;
     begin
         Close;
 
-        case Vendor_Found is
-            when Intel =>
-                -- Silvermont/Airmont Atoms, whose energy unit would be read wrongly
-                if Has_Unsupported_Energy_Unit then
-                    return False;
-                end if;
-
-                Power_Unit_MSR := MSR_INTEL_RAPL_POWER_UNIT;
-                Energy_MSR := MSR_INTEL_PKG_ENERGY_STATUS;
-
-            when AMD =>
-                Power_Unit_MSR := MSR_AMD_RAPL_POWER_UNIT;
-                Energy_MSR := MSR_AMD_PKG_ENERGY_STATUS;
-
-            when Unknown =>
-                return False;
-        end case;
+        if not Registers (Set) then
+            return False;
+        end if;
 
         case Driver is
             when PawnIO =>
                 -- A module refuses to load on the other vendor
-                if Vendor_Found = Intel then
+                if Vendor = Intel then
                     Opened := MSR_PawnIO.Open (PawnIO_Modules.Intel_MSR);
                 else
                     Opened := MSR_PawnIO.Open (PawnIO_Modules.AMD_Family17);
@@ -100,10 +127,45 @@ package body Joular_Core.RAPL_MSR_Windows is
 
         Current_Driver := Driver;
 
-        Energy_Exponent := Natural (Shift_Right (Read_MSR (Power_Unit_MSR) and ENERGY_UNIT_BITS, ENERGY_UNIT_SHIFT));
+        -- One processor of each package: the thread visits every processor in turn, until a group has none
+        Groups : for Group in 0 .. Max_Groups - 1 loop
+            Where.Group := Unsigned_16 (Group);
+
+            for Bit in 0 .. DWORD_PTR'Size - 1 loop
+                Where.Mask := 2 ** Bit;
+
+                if not Pin (Where, Previous'Access) then
+                    exit Groups when Bit = 0;
+                    exit;
+                end if;
+
+                Id := Package_Here;
+                Unpin (Previous);
+
+                if Count < Max_Packages and then not (for some Item of Packages (1 .. Count) => Item.Id = Id) then
+                    Count := Count + 1;
+                    Packages (Count) := (Where => Where, Id => Id, others => <>);
+                end if;
+            end loop;
+        end loop Groups;
+
+        if Count = 0 then
+            Close;
+            return False;
+        end if;
+
+        -- The unit is the same on every package
+        if Pin (Packages (1).Where, Previous'Access) then
+            Exponent := Energy_Exponent (Read_MSR (Set.Power_Unit));
+            Unpin (Previous);
+        end if;
+
+        for Item of Packages (1 .. Count) loop
+            Item.Counter := (Last => Read_Counter (Item), Wrap_At => Wrap_At (Exponent), others => <>);
+        end loop;
 
         -- No unit or a zero first reading: the driver isn't really reading
-        if Energy_Exponent = 0 or else Read_Counter = 0 then
+        if Exponent = 0 or else Packages (1).Counter.Last = 0 then
             Close;
             return False;
         end if;
@@ -117,30 +179,15 @@ package body Joular_Core.RAPL_MSR_Windows is
 
     --------------------------------------------------
 
-    function Wrap_At return Long_Long_Integer is
+    function Get_Energy return Long_Float is
+        Joules : Long_Float := 0.0;
     begin
-        if Energy_Exponent = 0 then
-            return 0;
-        end if;
+        for Item of Packages (1 .. Count) loop
+            Joules := Joules + Energy_Counters.Joules_Since_Last (Item.Counter, Read_Counter (Item));
+        end loop;
 
-        -- 2^32 counts of 1/2^Energy_Exponent joules
-        return 1_000_000 * 2 ** (32 - Energy_Exponent);
-    end Wrap_At;
-
-    --------------------------------------------------
-
-    function Read_Counter return Long_Long_Integer is
-        Raw_Value : Unsigned_64;
-    begin
-        if Energy_Exponent = 0 then
-            return 0;
-        end if;
-
-        -- Keeps the value in 0 .. 2^32 - 1, as the wrap correction assumes
-        Raw_Value := Read_MSR (Energy_MSR) and ENERGY_COUNTER_BITS;
-
-        return Long_Long_Integer (Raw_Value) * 1_000_000 / 2 ** Energy_Exponent;
-    end Read_Counter;
+        return Joules;
+    end Get_Energy;
 
     --------------------------------------------------
 
@@ -150,8 +197,9 @@ package body Joular_Core.RAPL_MSR_Windows is
         MSR_PawnIO.Close;
         MSR_Hubblo.Close;
 
-        Energy_MSR := 0;
-        Energy_Exponent := 0;
+        Packages := (others => <>);
+        Count := 0;
+        Exponent := 0;
     end Close;
 
 end Joular_Core.RAPL_MSR_Windows;

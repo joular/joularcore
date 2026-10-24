@@ -11,7 +11,7 @@
 
 -- RAPL on Windows, where the same counter can be reached three ways: the Energy Meter Interface (EMI) built into Windows, the MSR registers through the PawnIO driver, or through Hubblo's RAPL driver
 -- Keeps which one answered, reads through Joular_Core.RAPL_EMI_Windows or Joular_Core.RAPL_MSR_Windows, and turns the counter into energy
--- Only reads the PKG domain of the main CPU socket
+-- Reads the PKG domain of every CPU socket, added together
 private package Joular_Core.RAPL_Windows is
 
     -- Open the RAPL counter with the first approach that answers

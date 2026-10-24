@@ -12,13 +12,13 @@
 -- Power of the AMD GPU on Linux, from the hwmon sysfs of the amdgpu kernel driver (nothing to install)
 private package Joular_Core.GPU_AMD_Sysfs is
 
-    -- Finds the first amdgpu sensor with a readable power file
+    -- Finds every amdgpu sensor with a readable power file, False when there is none
     function Open return Boolean;
 
-    -- Power in watts, zero when it can't be read
+    -- Power drawn by all the cards, in watts; a card that cannot be read counts zero
     function Get_Power return Long_Float;
 
-    -- Forgets the card found, nothing to release
+    -- Forgets the cards found, nothing to release
     procedure Close;
 
 end Joular_Core.GPU_AMD_Sysfs;

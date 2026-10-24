@@ -9,17 +9,16 @@
 --  Author : Adel Noureddine
 --
 
--- RAPL energy counter of the PKG domain of the first socket, read from the registers of the processor through cpuctl(4)
--- Needs the cpuctl driver loaded (kldload cpuctl), and root or the kmem group, which the device belongs to
 private package Joular_Core.RAPL_CPUCTL is
 
-    -- Opens the device, reads the energy unit and takes a first reading; false when the processor has no RAPL registers or they cannot be read
+    -- Opens one device per package (socket), reads the energy unit and takes a first reading of each
+    -- False when the processor has no RAPL registers or they cannot be read
     function Open return Boolean;
 
-    -- Energy consumed since the last reading, in joules; zero when the counter can't be read
+    -- Energy consumed by all packages since the last reading, in joules; a package whose counter can't be read counts zero
     function Get_Energy return Long_Float;
 
-    -- Close the device
+    -- Close the devices
     procedure Close;
 
 end Joular_Core.RAPL_CPUCTL;

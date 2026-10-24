@@ -9,16 +9,13 @@
 --  Author : Adel Noureddine
 --
 
--- Read the power consumption of an Nvidia GPU through NVML
--- Requires the Nvidia driver, on Linux, Windows or FreeBSD
 private package Joular_Core.GPU_Nvidia_NVML is
 
-    -- Load NVML, start it and take one reading of the first card
+    -- Load NVML, start it and take one reading of every card
     -- Returns False when the driver is not installed or no card answers
     function Open return Boolean;
 
-    -- Power drawn by the card, in watts
-    -- Returns zero if the card cannot be read
+    -- Power drawn by all the cards, in watts; a card that cannot be read counts zero
     function Get_Power return Long_Float;
 
     -- Stop NVML and unload the library
