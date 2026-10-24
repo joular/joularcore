@@ -15,7 +15,7 @@ with Joular_Core.GPU_Monitor;
 package body Joular_Core is
 
     -- Keep it the same as the version in alire.toml
-    Version_Number : constant String := "0.0.5";
+    Version_Number : constant String := "0.0.6";
 
     -- The sources asked for in Open that could be opened
     Opened_Sources : Source_List := (others => False);
