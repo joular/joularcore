@@ -47,7 +47,7 @@ package body Joular_Core.Energy_Counters is
         Joules := Long_Float (Microjoules) / 1_000_000.0;
 
         -- More than a package can draw: the counter was reset, and this reading only starts the next one
-        if Seconds > 0.0 and then Joules / Seconds > Max_Package_Watts then
+        if Seconds > 0.0 and then Joules / Seconds > Max_Package_Watts * Long_Float (Item.Packages) then
             return 0.0;
         end if;
 

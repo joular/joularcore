@@ -29,12 +29,15 @@ private package Joular_Core.Energy_Counters is
 
            -- When Last was read, to tell energy from a reset
            Last_Time : Ada.Real_Time.Time := Ada.Real_Time.Clock;
+
+           -- How many packages the counter adds up (EMI sums every socket), so the reset bound grows with them
+           Packages : Positive := 1;
        end record;
 
     -- Energy consumed since the last reading, in joules, and keep Reading as the new last one
     -- A reading of zero means the counter couldn't be read: it gives zero and keeps the last reading, so the next reading that works covers the gap
     -- A drop is a wrap, corrected by adding the range; only one wrap can be corrected, so read more often than the counter takes to fill half its range
-    -- Energy that would mean more than Max_Package_Watts is a reset: it gives zero, and the next reading counts from this one
+    -- Energy that would mean more than Max_Package_Watts per package is a reset: it gives zero, and the next reading counts from this one
     function Joules_Since_Last (Item : in out Counter; Reading : in Long_Long_Integer) return Long_Float;
 
 end Joular_Core.Energy_Counters;

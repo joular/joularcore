@@ -60,7 +60,8 @@ package body Joular_Core.RAPL_Windows is
         if Wanted in Any | Only_EMI and then RAPL_EMI_Windows.Open then
             Reader := EMI;
             -- Windows already unwraps the counter
-            Counter := (Last => RAPL_EMI_Windows.Read_Counter, Wrap_At => 0, others => <>);
+            Counter := (Last => RAPL_EMI_Windows.Read_Counter, Wrap_At => 0,
+                        Packages => RAPL_EMI_Windows.Packages, others => <>);
             return True;
         end if;
 

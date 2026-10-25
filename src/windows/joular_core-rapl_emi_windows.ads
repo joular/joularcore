@@ -25,6 +25,9 @@ private package Joular_Core.RAPL_EMI_Windows is
     -- Windows hands over a 64-bit counter already unwrapped, which takes years to wrap at package power, so there is no wrap to correct
     function Read_Counter return Long_Long_Integer;
 
+    -- How many package channels Read_Counter adds up, zero when no meter is open
+    function Packages return Natural;
+
     -- Close the meter
     procedure Close;
 

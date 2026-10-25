@@ -562,6 +562,10 @@ package body Joular_Core.RAPL_EMI_Windows is
 
     --------------------------------------------------
 
+    function Packages return Natural is (Package_Count);
+
+    --------------------------------------------------
+
     procedure Close is
         Ignored : BOOL;
     begin
