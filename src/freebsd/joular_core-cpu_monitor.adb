@@ -9,28 +9,28 @@
 --  Author : Adel Noureddine
 --
 
-with Joular_Core.GPU_Nvidia_NVML;
+with Joular_Core.RAPL_CPUCTL;
 
--- BSD: Nvidia cards through NVML
-package body Joular_Core.GPU_Monitor is
+-- FreeBSD: RAPL through cpuctl (Intel and AMD)
+package body Joular_Core.CPU_Monitor is
 
     function Open return Boolean is
     begin
-        return GPU_Nvidia_NVML.Open;
+        return RAPL_CPUCTL.Open;
     end Open;
 
     --------------------------------------------------
 
     function Read return Measurement is
     begin
-        return (Available => True, Value => GPU_Nvidia_NVML.Get_Power, Unit => Power);
+        return (Available => True, Value => RAPL_CPUCTL.Get_Energy, Unit => Energy);
     end Read;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        GPU_Nvidia_NVML.Close;
+        RAPL_CPUCTL.Close;
     end Close;
 
-end Joular_Core.GPU_Monitor;
+end Joular_Core.CPU_Monitor;

@@ -28,7 +28,7 @@ package Joular_Core.C_API is
     type C_Measurement is
        record
            Value : Interfaces.C.double := 0.0; -- Energy or power value
-           Available : Interfaces.C.int := 0; -- 1 when the source was requested and read, 0 otherwise
+           Available : Interfaces.C.int := 0; -- 1 when the source was requested and opened, 0 otherwise
            Unit : Interfaces.C.int := 0; -- 0 when Value is energy in joules, 1 when it is power in watts
        end record
        with Convention => C;

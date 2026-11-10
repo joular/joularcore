@@ -30,7 +30,7 @@ extern "C" {
 /* One measurement of one hardware source */
 typedef struct joularcore_measurement {
     double value;      /* energy or power value, see unit */
-    int    available;  /* 1 when the source was requested and read, 0 otherwise */
+    int    available;  /* 1 when the source was requested and opened, 0 otherwise */
     int    unit;       /* 0 when value is energy in joules, 1 when it is power in watts */
 } joularcore_measurement;
 

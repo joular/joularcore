@@ -143,12 +143,6 @@ package body Joular_Core.MSR_PawnIO is
         Output : aliased Unsigned_64 := 0;
         Bytes_Returned : aliased DWORD := 0;
         Result : BOOL := 0;
-        Thread : HANDLE;
-
-        -- Processor 0 of group 0 is the first socket, whatever group the thread runs in
-        First_Processor : aliased constant GROUP_AFFINITY := (Mask => 1, Group => 0, Reserved => (others => 0));
-        Previous_Affinity : aliased GROUP_AFFINITY := (Mask => 0, Group => 0, Reserved => (others => 0));
-        Ignored : BOOL;
     begin
         Value := 0;
 
@@ -156,30 +150,16 @@ package body Joular_Core.MSR_PawnIO is
             return False;
         end if;
 
-        -- The module reads the MSR of the current processor (Hubblo's driver pins in the kernel), so pin the thread to the first socket
-        Thread := GetCurrentThread;
-
-        if SetThreadGroupAffinity (Thread, First_Processor'Address, Previous_Affinity'Address) = 0 then
-            return False;
-        end if;
-
-        -- Own block so the affinity is always restored
-        begin
-            Result := DeviceIoControl
-               (hDevice => Driver_Handle,
-                dwIoControlCode => IOCTL_PIO_EXECUTE_FN,
-                lpInBuffer => Input'Address,
-                nInBufferSize => Execute_Input_Size,
-                lpOutBuffer => Output'Address,
-                nOutBufferSize => Execute_Output_Size,
-                lpBytesReturned => Bytes_Returned'Address,
-                lpOverlapped => System.Null_Address);
-        exception
-            when others =>
-                Result := 0;
-        end;
-
-        Ignored := SetThreadGroupAffinity (Thread, Previous_Affinity'Address, System.Null_Address);
+        -- The module reads the MSR of the processor running the thread, which the caller has pinned
+        Result := DeviceIoControl
+           (hDevice => Driver_Handle,
+            dwIoControlCode => IOCTL_PIO_EXECUTE_FN,
+            lpInBuffer => Input'Address,
+            nInBufferSize => Execute_Input_Size,
+            lpOutBuffer => Output'Address,
+            nOutBufferSize => Execute_Output_Size,
+            lpBytesReturned => Bytes_Returned'Address,
+            lpOverlapped => System.Null_Address);
 
         -- A call that went through reports the whole output size
         if Result = 0 or else Bytes_Returned /= Execute_Output_Size then
@@ -188,6 +168,11 @@ package body Joular_Core.MSR_PawnIO is
 
         Value := Output;
         return True;
+    exception
+        -- So the caller always gets to unpin the thread
+        when others =>
+            Value := 0;
+            return False;
     end Read;
 
     --------------------------------------------------

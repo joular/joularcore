@@ -9,26 +9,28 @@
 --  Author : Adel Noureddine
 --
 
--- BSD: no CPU is supported yet
-package body Joular_Core.CPU_Monitor is
+with Joular_Core.GPU_Nvidia_NVML;
+
+-- FreeBSD: Nvidia cards through NVML
+package body Joular_Core.GPU_Monitor is
 
     function Open return Boolean is
     begin
-        return False;
+        return GPU_Nvidia_NVML.Open;
     end Open;
 
     --------------------------------------------------
 
     function Read return Measurement is
     begin
-        return (others => <>);
+        return (Available => True, Value => GPU_Nvidia_NVML.Get_Power, Unit => Power);
     end Read;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        null;
+        GPU_Nvidia_NVML.Close;
     end Close;
 
-end Joular_Core.CPU_Monitor;
+end Joular_Core.GPU_Monitor;

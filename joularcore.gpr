@@ -6,30 +6,29 @@ library project Joularcore is
     Host_OS := external ("OS", "");
     Default_OS := "linux";
 
-    -- The names are the canonical ones of gprconfig (OpenBSD has none, so build there with -XPJ_OS=bsd)
+    -- The names are the canonical ones of gprconfig, plus aarch64-linux-gnu, which the gprbuild of Debian 12 and Ubuntu 22.04 reports
     case Host_Target is
         when "x86_64-windows" | "x86-windows"
             => Default_OS := "windows";
         when "aarch64-darwin" | "x86_64-darwin" | "x86-darwin"
             => Default_OS := "macos";
-        when "x86_64-linux" | "aarch64-linux" | "arm-linux" | "armhf-linux" | "x86-linux"
+        when "x86_64-linux" | "aarch64-linux" | "aarch64-linux-gnu" | "arm-linux" | "armhf-linux" | "x86-linux"
             => Default_OS := "linux";
-        when "x86_64-freebsd" | "aarch64-freebsd" | "x86-freebsd"
-           | "x86_64-netbsd" | "aarch64-netbsd" | "x86_64-dragonfly"
-            => Default_OS := "bsd";
+        when "x86_64-freebsd" | "aarch64-freebsd"
+            => Default_OS := "freebsd";
         when others =>
-            -- A name not listed above: Windows says so in its environment, anything else is taken as Linux
+            -- A name not listed above: Windows says so in its environment, anything else stops the build, so pass -XPJ_OS
             case Host_OS is
                 when "Windows_NT" => Default_OS := "windows";
-                when others => null;
+                when others => Default_OS := "";
             end case;
     end case;
 
-    type OS_Platform is ("linux", "windows", "macos", "bsd");
+    type OS_Platform is ("linux", "windows", "macos", "freebsd");
     PJ_OS : OS_Platform := external ("PJ_OS", Default_OS);
 
     -- Code shared by every OS is in src, the code of one OS in its own folder
-    -- src/posix holds shared code for Linux, macOS and BSD
+    -- src/posix holds shared code for Linux, macOS and FreeBSD, src/msr what Windows and FreeBSD, reading the RAPL registers themselves, share
     -- The symbols in Defines let the example program print what applies to the OS it was built for
     Defines := ();
 
@@ -37,27 +36,27 @@ library project Joularcore is
         when "linux" =>
             for Source_Dirs use ("src", "src/posix", "src/linux");
             Defines := ("-gnateDPJ_LINUX=True", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "windows" =>
-            for Source_Dirs use ("src", "src/windows");
+            for Source_Dirs use ("src", "src/msr", "src/windows");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=True",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=False");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=False");
         when "macos" =>
             for Source_Dirs use ("src", "src/posix", "src/macos");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=True", "-gnateDPJ_BSD=False");
-        when "bsd" =>
-            for Source_Dirs use ("src", "src/posix", "src/bsd");
+                        "-gnateDPJ_MACOS=True", "-gnateDPJ_FREEBSD=False");
+        when "freebsd" =>
+            for Source_Dirs use ("src", "src/posix", "src/msr", "src/freebsd");
             Defines := ("-gnateDPJ_LINUX=False", "-gnateDPJ_WINDOWS=False",
-                        "-gnateDPJ_MACOS=False", "-gnateDPJ_BSD=True");
+                        "-gnateDPJ_MACOS=False", "-gnateDPJ_FREEBSD=True");
     end case;
 
-    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows, to read the RAPL registers)
+    -- Whether the processor is a 64 bits x86, which has the CPUID instruction (only used on Windows and FreeBSD, to read the RAPL registers)
     -- Override with: gprbuild -XPJ_X86=False
     Default_X86 := "False";
     case Host_Target is
         when "x86_64-windows" | "x86_64-darwin" | "x86_64-linux"
-           | "x86_64-freebsd" | "x86_64-netbsd" | "x86_64-dragonfly"
+           | "x86_64-freebsd"
             => Default_X86 := "True";
         when others
             => Default_X86 := "False";
@@ -97,13 +96,17 @@ library project Joularcore is
                     -- The specs file records that folder instead, so the library finds the runtime without DYLD_LIBRARY_PATH
                     for Run_Path_Option use ();
                     for Library_Options use ("-specs=" & project'Project_Dir & "src/macos/ada_runtime_rpath.specs");
+                when "freebsd" =>
+                    for Library_Standalone use "encapsulated";
+                    -- Ada.Real_Time (the energy counters) brings the tasking runtime, which needs libpthread: separate from libc on FreeBSD
+                    for Library_Options use ("-lpthread");
                 when others =>
                     for Library_Standalone use "encapsulated";
             end case;
 
             -- The number is the ABI: bump it only when the C interface changes in an incompatible way
             case PJ_OS is
-                when "linux" | "bsd" =>
+                when "linux" | "freebsd" =>
                     for Library_Version use "libjoularcore.so.0";
                 when others =>
                     null;

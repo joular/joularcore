@@ -12,11 +12,10 @@
 -- Power of the AMD GPU on Windows, through ADLX, which comes with the AMD driver
 private package Joular_Core.GPU_AMD_ADLX is
 
-    -- Loads ADLX, starts it and takes one reading; False if any step fails
+    -- Loads ADLX, starts it and takes one reading of every card; False if any step fails or no card reports power
     function Open return Boolean;
 
-    -- Get a power reading in watts
-    -- Returns zero if the GPU power cannot be read
+    -- Power drawn by all the cards, in watts; a card that cannot be read counts zero
     function Get_Power return Long_Float;
 
     -- Stop ADLX and unload the library

@@ -9,16 +9,15 @@
 --  Author : Adel Noureddine
 --
 
--- RAPL energy counter of the PKG domain of the main CPU socket, through powercap sysfs
 private package Joular_Core.RAPL_Powercap is
 
-    -- Finds the PKG domain and takes a first reading, false when none can be read
+    -- Finds the package domains (one per socket) and takes a first reading of each, false when none can be read
     function Open return Boolean;
 
-    -- Energy consumed since the last reading, in joules; zero when the counter can't be read
+    -- Energy consumed by all packages since the last reading, in joules; a package whose counter can't be read counts zero
     function Get_Energy return Long_Float;
 
-    -- Forgets the domain found, nothing to release
+    -- Forgets the domains found, nothing to release
     procedure Close;
 
 end Joular_Core.RAPL_Powercap;

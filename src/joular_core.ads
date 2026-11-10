@@ -25,7 +25,7 @@ package Joular_Core is
     All_Sources : constant Source_List := (others => True);
 
     -- Energy: joules consumed since the previous Read (the first Read counts from Open)
-    -- Power: watts being drawn at the time of the Read
+    -- Power: watts being drawn, when read or averaged since the previous Read
     type Measurement_Unit is (Energy, Power);
 
     -- Available : the source was requested and can be read

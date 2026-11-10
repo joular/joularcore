@@ -23,7 +23,7 @@ private package Joular_Core.MSR_PawnIO is
     -- Calling it again closes the driver first: a handle takes only one module
     function Open (Module : in Storage_Array) return Boolean;
 
-    -- Read one register
+    -- Read one register, on the processor running the thread
     -- Returns False when the driver would not answer, leaving Value at zero
     function Read (MSR : in Interfaces.Unsigned_64; Value : out Interfaces.Unsigned_64) return Boolean;
 

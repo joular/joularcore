@@ -48,7 +48,7 @@ class Measurement(ctypes.Structure):
 
     _fields_ = [
         ("value", ctypes.c_double),   # energy or power value, see unit
-        ("available", ctypes.c_int),  # 1 when the source was requested and read, 0 otherwise
+        ("available", ctypes.c_int),  # 1 when the source was requested and opened, 0 otherwise
         ("unit", ctypes.c_int),       # 0 when value is energy in joules, 1 when it is power in watts
     ]
 
@@ -109,6 +109,10 @@ def load_library():
 
         sys.exit("\n".join(message))
 
+    # The Ada runtime in the library may install its own Ctrl+C handler when loaded, replacing Python's
+    # Put Python's back so Ctrl+C raises KeyboardInterrupt
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+
     library.joularcore_open.argtypes = [ctypes.c_int, ctypes.c_int]
     library.joularcore_open.restype = None
 
@@ -157,10 +161,6 @@ def main():
     reading = Reading()
     wanted = wanted_readings(sys.argv)
     taken = 0
-
-    # The Ada runtime in the library installs its own Ctrl+C handler on load, replacing Python's
-    # Put Python's back so Ctrl+C raises KeyboardInterrupt
-    signal.signal(signal.SIGINT, signal.default_int_handler)
 
     print("Joular Core", library.joularcore_version().decode())
 

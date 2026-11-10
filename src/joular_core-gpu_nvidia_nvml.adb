@@ -27,6 +27,9 @@ package body Joular_Core.GPU_Nvidia_NVML is
     type Shutdown_Function is access function return int;
     pragma Convention (C, Shutdown_Function);
 
+    type Count_Function is access function (Count : access unsigned) return int;
+    pragma Convention (C, Count_Function);
+
     type Handle_Function is access function (Index : unsigned; Device : access System.Address) return int;
     pragma Convention (C, Handle_Function);
 
@@ -36,6 +39,7 @@ package body Joular_Core.GPU_Nvidia_NVML is
     -- Find_Symbol gives an address, so convert it to the function it points to
     function To_Init is new Ada.Unchecked_Conversion (System.Address, Init_Function);
     function To_Shutdown is new Ada.Unchecked_Conversion (System.Address, Shutdown_Function);
+    function To_Count is new Ada.Unchecked_Conversion (System.Address, Count_Function);
     function To_Handle is new Ada.Unchecked_Conversion (System.Address, Handle_Function);
     function To_Power is new Ada.Unchecked_Conversion (System.Address, Power_Function);
 
@@ -48,7 +52,11 @@ package body Joular_Core.GPU_Nvidia_NVML is
 
     NVML_Device_Power : Power_Function := null;
 
-    Card : aliased System.Address := System.Null_Address;
+    -- The cards that report power
+    Max_Cards : constant := 16;
+
+    Cards : array (1 .. Max_Cards) of System.Address := (others => System.Null_Address);
+    Count : Natural := 0;
 
     --------------------------------------------------
 
@@ -61,7 +69,10 @@ package body Joular_Core.GPU_Nvidia_NVML is
     function Open return Boolean is
         Start_NVML : Init_Function;
         Stop_NVML : Shutdown_Function;
+        Get_Count : Count_Function;
         Get_Handle : Handle_Function;
+        Found : aliased unsigned := 0;
+        Card : aliased System.Address := System.Null_Address;
         Milliwatts : aliased unsigned := 0;
     begin
         -- Open may be called twice: close first so the library isn't loaded twice
@@ -75,10 +86,12 @@ package body Joular_Core.GPU_Nvidia_NVML is
 
         Start_NVML := To_Init (Find_Symbol (NVML_Library, "nvmlInit_v2"));
         Stop_NVML := To_Shutdown (Find_Symbol (NVML_Library, "nvmlShutdown"));
+        Get_Count := To_Count (Find_Symbol (NVML_Library, "nvmlDeviceGetCount_v2"));
         Get_Handle := To_Handle (Find_Symbol (NVML_Library, "nvmlDeviceGetHandleByIndex_v2"));
         NVML_Device_Power := To_Power (Find_Symbol (NVML_Library, "nvmlDeviceGetPowerUsage"));
 
-        if Start_NVML = null or else Stop_NVML = null or else Get_Handle = null or else NVML_Device_Power = null
+        if Start_NVML = null or else Stop_NVML = null or else Get_Count = null or else Get_Handle = null
+           or else NVML_Device_Power = null
         then
             Close;
             return False;
@@ -92,9 +105,19 @@ package body Joular_Core.GPU_Nvidia_NVML is
         -- NVML started, so keep the function closing it
         NVML_Shutdown := Stop_NVML;
 
-        -- First card listed, check it reports power
-        if Get_Handle (0, Card'Access) /= NVML_SUCCESS or else NVML_Device_Power (Card, Milliwatts'Access) /= NVML_SUCCESS
-        then
+        -- Every card that reports power
+        if Get_Count (Found'Access) = NVML_SUCCESS then
+            for Index in 0 .. Natural'Min (Natural (Found), Max_Cards) - 1 loop
+                if Get_Handle (unsigned (Index), Card'Access) = NVML_SUCCESS
+                   and then NVML_Device_Power (Card, Milliwatts'Access) = NVML_SUCCESS
+                then
+                    Count := Count + 1;
+                    Cards (Count) := Card;
+                end if;
+            end loop;
+        end if;
+
+        if Count = 0 then
             Close;
             return False;
         end if;
@@ -110,12 +133,16 @@ package body Joular_Core.GPU_Nvidia_NVML is
 
     function Get_Power return Long_Float is
         Milliwatts : aliased unsigned := 0;
+        Watts : Long_Float := 0.0;
     begin
-        if Card = System.Null_Address or else NVML_Device_Power (Card, Milliwatts'Access) /= NVML_SUCCESS then
-            return 0.0;
-        end if;
+        -- A card that would not answer counts zero
+        for Card of Cards (1 .. Count) loop
+            if NVML_Device_Power (Card, Milliwatts'Access) = NVML_SUCCESS then
+                Watts := Watts + Long_Float (Milliwatts) / 1_000.0;
+            end if;
+        end loop;
 
-        return Long_Float (Milliwatts) / 1_000.0;
+        return Watts;
     exception
         when others =>
             return 0.0;
@@ -138,7 +165,8 @@ package body Joular_Core.GPU_Nvidia_NVML is
             NVML_Shutdown := null;
         end if;
 
-        Card := System.Null_Address;
+        Cards := (others => System.Null_Address);
+        Count := 0;
         NVML_Device_Power := null;
 
         if NVML_Library /= System.Null_Address then

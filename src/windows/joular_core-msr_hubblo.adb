@@ -48,7 +48,7 @@ package body Joular_Core.MSR_Hubblo is
         -- Known from the driver's published source, not from the signed binary installed
         Request_Code : constant DWORD :=
             Control_Code (FILE_DEVICE_UNKNOWN, DWORD (MSR and 16#FFF#), METHOD_BUFFERED, ACCESS_READ_WRITE);
-        Input : aliased Unsigned_64 := MSR; -- Register in the low half, processor in the high half (zero: the first one)
+        Input : aliased Unsigned_64 := MSR; -- Register in the low half, processor in the high half (zero: the driver pins nothing, the caller has)
         Output : aliased Unsigned_64 := 0;
         Bytes_Returned : aliased DWORD := 0;
         Result : BOOL;

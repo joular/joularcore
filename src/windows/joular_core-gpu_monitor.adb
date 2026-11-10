@@ -12,55 +12,51 @@
 with Joular_Core.GPU_Nvidia_NVML;
 with Joular_Core.GPU_AMD_ADLX;
 
--- Windows: Nvidia cards through NVML, otherwise AMD cards through ADLX
 package body Joular_Core.GPU_Monitor is
 
-    type Driver_Kind is (None, Nvidia_NVML, AMD_ADLX);
-
-    Driver : Driver_Kind := None;
+    -- Both, so a machine carrying cards of both makes is read whole
+    Nvidia_Open : Boolean := False;
+    AMD_Open : Boolean := False;
 
     --------------------------------------------------
 
     function Open return Boolean is
     begin
-        if GPU_Nvidia_NVML.Open then
-            Driver := Nvidia_NVML;
-        elsif GPU_AMD_ADLX.Open then
-            Driver := AMD_ADLX;
-        else
-            Driver := None;
-        end if;
+        Nvidia_Open := GPU_Nvidia_NVML.Open;
+        AMD_Open := GPU_AMD_ADLX.Open;
 
-        return Driver /= None;
+        return Nvidia_Open or AMD_Open;
     end Open;
 
     --------------------------------------------------
 
     function Read return Measurement is
+        Watts : Long_Float := 0.0;
     begin
-        case Driver is
-            when Nvidia_NVML =>
-                return (Available => True, Value => GPU_Nvidia_NVML.Get_Power, Unit => Power);
+        if not (Nvidia_Open or AMD_Open) then
+            return (others => <>);
+        end if;
 
-            when AMD_ADLX =>
-                return (Available => True, Value => GPU_AMD_ADLX.Get_Power, Unit => Power);
+        if Nvidia_Open then
+            Watts := Watts + GPU_Nvidia_NVML.Get_Power;
+        end if;
 
-            when None =>
-                return (others => <>);
-        end case;
+        if AMD_Open then
+            Watts := Watts + GPU_AMD_ADLX.Get_Power;
+        end if;
+
+        return (Available => True, Value => Watts, Unit => Power);
     end Read;
 
     --------------------------------------------------
 
     procedure Close is
     begin
-        case Driver is
-            when Nvidia_NVML => GPU_Nvidia_NVML.Close;
-            when AMD_ADLX => GPU_AMD_ADLX.Close;
-            when None => null;
-        end case;
+        GPU_Nvidia_NVML.Close;
+        GPU_AMD_ADLX.Close;
 
-        Driver := None;
+        Nvidia_Open := False;
+        AMD_Open := False;
     end Close;
 
 end Joular_Core.GPU_Monitor;

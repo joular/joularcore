@@ -19,10 +19,11 @@ package body Joular_Core.Processor is
 #if PJ_X86 then
 
     -- Ask the processor about itself
-    -- Leaf says what is being asked for, and the four registers are what the processor answers with
+    -- Leaf and Subleaf say what is being asked for, and the four registers are what the processor answers with
     -- All four outputs are declared so the compiler knows cpuid overwrites them
     procedure CPU_ID
        (Leaf : in Unsigned_32;
+        Subleaf : in Unsigned_32;
         EAX : out Unsigned_32;
         EBX : out Unsigned_32;
         ECX : out Unsigned_32;
@@ -35,7 +36,7 @@ package body Joular_Core.Processor is
                          Unsigned_32'Asm_Output ("=c", ECX),
                          Unsigned_32'Asm_Output ("=d", EDX)),
              Inputs => (Unsigned_32'Asm_Input ("a", Leaf),
-                        Unsigned_32'Asm_Input ("c", Unsigned_32'(0))),
+                        Unsigned_32'Asm_Input ("c", Subleaf)),
              Volatile => True);
     end CPU_ID;
 
@@ -54,7 +55,7 @@ package body Joular_Core.Processor is
             end loop;
         end Put_Word;
     begin
-        CPU_ID (0, EAX, EBX, ECX, EDX);
+        CPU_ID (0, 0, EAX, EBX, ECX, EDX);
 
         Put_Word (EBX, 1);
         Put_Word (EDX, 5);
@@ -86,7 +87,7 @@ package body Joular_Core.Processor is
         Family : Unsigned_32;
         Model : Unsigned_32;
     begin
-        CPU_ID (1, EAX, EBX, ECX, EDX);
+        CPU_ID (1, 0, EAX, EBX, ECX, EDX);
 
         -- Family 6 adds the extended model bits 19:16 to the model
         Family := Shift_Right (EAX, 8) and 16#F#;
@@ -105,6 +106,34 @@ package body Joular_Core.Processor is
                or else Model = 16#5A# or else Model = 16#5D#;
     end Has_Unsupported_Energy_Unit;
 
+    --------------------------------------------------
+
+    function Package_Of (EAX, EBX, EDX : in Interfaces.Unsigned_32) return Natural is
+    begin
+        if EBX = 0 then
+            return 0;
+        end if;
+
+        return Natural (Shift_Right (EDX, Natural (EAX and 16#1F#)));
+    end Package_Of;
+
+    --------------------------------------------------
+
+    function Package_Here return Natural is
+        EAX, EBX, ECX, EDX : Unsigned_32;
+    begin
+        -- Leaf 0 says how far the leaves go
+        CPU_ID (0, 0, EAX, EBX, ECX, EDX);
+
+        if EAX < 16#B# then
+            return 0;
+        end if;
+
+        CPU_ID (16#B#, 1, EAX, EBX, ECX, EDX);
+
+        return Package_Of (EAX, EBX, EDX);
+    end Package_Here;
+
 #else
 
     -- Not 64 bits x86: no CPUID to ask, and no RAPL registers to read
@@ -120,6 +149,21 @@ package body Joular_Core.Processor is
     begin
         return False;
     end Has_Unsupported_Energy_Unit;
+
+    --------------------------------------------------
+
+    function Package_Of (EAX, EBX, EDX : in Interfaces.Unsigned_32) return Natural is
+        pragma Unreferenced (EAX, EBX, EDX);
+    begin
+        return 0;
+    end Package_Of;
+
+    --------------------------------------------------
+
+    function Package_Here return Natural is
+    begin
+        return 0;
+    end Package_Here;
 
 #end if;
 

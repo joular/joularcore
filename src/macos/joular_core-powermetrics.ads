@@ -11,14 +11,16 @@
 
 -- Read the CPU and the GPU power of Macs, from the powermetrics tool of macOS (Mac Intel: the CPU only)
 -- One powermetrics process serves both CPU and GPU: started by the first Open, killed by the last Close
+-- It is asked for a sample at each reading, so a reading is the average power since the previous one
+-- Readings within 0.1 s share a sample: that is how the CPU and the GPU come from one
 private package Joular_Core.Powermetrics is
 
     -- Start powermetrics if it is not started yet, and wait for its first sample
     -- Returns False for the GPU on Mac Intel, and when the program is not run as root
     function Open (Item : in Source) return Boolean;
 
-    -- Get the power of the source in the last sample, in watts
-    -- Returns zero when powermetrics stops answering
+    -- Get the power of the source since the previous sample, in watts
+    -- Returns zero when powermetrics stops answering, until it is started again
     function Get_Power (Item : in Source) return Long_Float;
 
     -- Let go of the process
