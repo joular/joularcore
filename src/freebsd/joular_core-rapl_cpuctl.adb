@@ -26,9 +26,9 @@ package body Joular_Core.RAPL_CPUCTL is
     Max_Processors : constant := 1024;
     Max_Packages : constant := 16;
 
-    -- CPUCTL_RDMSR and CPUCTL_CPUID_COUNT of sys/cpuctl.h: _IOWR ('c', 1, cpuctl_msr_args_t) and _IOWR ('c', 4, cpuctl_cpuid_count_args_t)
+    -- CPUCTL_RDMSR and CPUCTL_CPUID_COUNT of sys/cpuctl.h: _IOWR ('c', 1, cpuctl_msr_args_t) and _IOWR ('c', 7, cpuctl_cpuid_count_args_t)
     CPUCTL_RDMSR : constant unsigned_long := 16#C010_6301#;
-    CPUCTL_CPUID_COUNT : constant unsigned_long := 16#C018_6304#;
+    CPUCTL_CPUID_COUNT : constant unsigned_long := 16#C018_6307#;
 
     -- cpuctl_msr_args_t: the register to read, and what it holds
     type MSR_Args is
